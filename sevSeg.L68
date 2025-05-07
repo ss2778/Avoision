@@ -1,0 +1,284 @@
+00000000 Starting Address
+Assembler used: EASy68K Editor/Assembler v5.16.01
+Created On: 10/15/2024 3:45:35 PM
+
+00000000                             1  *-----------------------------------------------------------
+00000000                             2  * Title      : Seven Segment
+00000000                             3  * Written by : Brandon Holtzman
+00000000                             4  * Date       : 10/14/2024
+00000000                             5  * Description: Seven segment display code for assembly game
+00000000                             6  *-----------------------------------------------------------
+00000000  =00000054                  7  SSEG_DRAW_LINE             EQU  84
+00000000                             8  
+00000000                             9  
+00000000  =00000001                 10  SSEG_A_SEG                 EQU  1 << 0
+00000000  =00000001                 11  SSEG_B_SEG                 EQU  1 << 1
+00000000  =00000001                 12  SSEG_C_SEG                 EQU  1 << 2
+00000000  =00000001                 13  SSEG_D_SEG                 EQU  1 << 3
+00000000  =00000001                 14  SSEG_E_SEG                 EQU  1 << 4
+00000000  =00000001                 15  SSEG_F_SEG                 EQU  1 << 5
+00000000  =00000001                 16  SSEG_G_SEG                 EQU  1 << 6
+00000000                            17  
+00000000                            18  
+00000000  =00000050                 19  SSEG_PEN_COLOR             EQU  80
+00000000  =00FFFFFF                 20  SSEG_PEN_WHITE             EQU  $00FFFFFF
+00000000  =00000000                 21  SSEG_PEN_BLACK             EQU  0
+00000000                            22  
+00000000  =000001E0                 23  SSEG_SCORE_LEFT_X          EQU  480
+00000000  =00000050                 24  SSEG_LIVES_LEFT_X          EQU  80
+00000000  =00000194                 25  SSEG_TOP_Y                 EQU  404
+00000000  =00000020                 26  SSEG_LINE_LENGTH           EQU  32
+00000000  =00000008                 27  SSEG_DIGIT_DISTANCE        EQU  8
+00000000                            28  
+00000000                            29  *---
+00000000                            30  * Initialize 7 segment displays
+00000000                            31  * 
+00000000                            32  * a3 - character object address
+00000000                            33  * 
+00000000                            34  *---
+00000000                            35  sseg_init:
+00000000                            36      * initialize both values
+00000000  23FC 00000000 00000122    37      move.l #0, SSEG_SCORE
+0000000A                            38      
+0000000A                            39      * call both draw functions
+0000000A  6100 0008                 40      bsr sseg_drawDigit
+0000000E  6100 0102                 41      bsr sseg_drawLives
+00000012  4E75                      42      rts
+00000014                            43      
+00000014                            44  *---
+00000014                            45  * Draw a single digit at the specified position
+00000014                            46  * 
+00000014                            47  * d0 - digit to draw
+00000014                            48  * d5 - X position of digit position
+00000014                            49  * 
+00000014                            50  *---
+00000014                            51  sseg_drawDigit:
+00000014                            52  .REGS  REG D2-D7/A2
+00000014  48E7 3F20                 53      movem.l .REGS, -(sp)
+00000018                            54      * load the appropriate digit bitfield
+00000018  45F9 00000126             55      lea SSEG_ARRAY, a2
+0000001E  1E32 0000                 56      move.b (a2, d0), d7
+00000022                            57      * load the highest y position of the digit
+00000022  3C3C 0194                 58      move.w #SSEG_TOP_Y, d6
+00000026                            59      
+00000026                            60      * check and draw each segment
+00000026                            61      * if it is active, draw it with a white pen color
+00000026                            62      * if inactive, draw it with a black pen color
+00000026                            63      
+00000026                            64      * check A segment
+00000026  0807 0000                 65      btst #0, d7
+0000002A  6600 0008                 66      bne .Awhite
+0000002E  7200                      67      move.l #SSEG_PEN_BLACK, d1
+00000030  6000 0008                 68      bra .Adraw
+00000034                            69  .Awhite
+00000034  223C 00FFFFFF             70      move.l #SSEG_PEN_WHITE, d1
+0000003A                            71  .Adraw
+0000003A                            72      * set color
+0000003A  7050                      73      move.l #SSEG_PEN_COLOR, d0
+0000003C  4E4F                      74      trap #15
+0000003E                            75      * set A segment parameters
+0000003E  3205                      76      move.w d5, d1
+00000040  3605                      77      move.w d5, d3
+00000042  0643 0020                 78      add.w #SSEG_LINE_LENGTH, d3
+00000046  3406                      79      move.w d6, d2
+00000048  3806                      80      move.w d6, d4
+0000004A  7054                      81      move.l #SSEG_DRAW_LINE, d0
+0000004C  4E4F                      82      trap #15
+0000004E                            83      
+0000004E                            84      * check B segment
+0000004E  0807 0001                 85      btst #1, d7
+00000052  6600 0008                 86      bne .Bwhite
+00000056  7200                      87      move.l #SSEG_PEN_BLACK, d1
+00000058  6000 0008                 88      bra .Bdraw
+0000005C                            89  .Bwhite
+0000005C  223C 00FFFFFF             90      move.l #SSEG_PEN_WHITE, d1
+00000062                            91  .Bdraw
+00000062                            92      * set color
+00000062  7050                      93      move.l #SSEG_PEN_COLOR, d0
+00000064  4E4F                      94      trap #15
+00000066                            95      * set B segment parameters
+00000066  3205                      96      move.w d5, d1
+00000068  0641 0020                 97      add.w #SSEG_LINE_LENGTH, d1
+0000006C  3605                      98      move.w d5, d3
+0000006E  3406                      99      move.w d6, d2
+00000070  5242                     100      add.w #1, d2
+00000072  3806                     101      move.w d6, d4
+00000074  0644 0021                102      add.w #SSEG_LINE_LENGTH+1, d4
+00000078  7054                     103      move.l #SSEG_DRAW_LINE, d0
+0000007A  4E4F                     104      trap #15
+0000007C                           105      
+0000007C                           106      * check C segment
+0000007C  0807 0002                107      btst #2, d7
+00000080  6600 0008                108      bne .Cwhite
+00000084  7200                     109      move.l #SSEG_PEN_BLACK, d1
+00000086  6000 0008                110      bra .Cdraw
+0000008A                           111  .Cwhite
+0000008A  223C 00FFFFFF            112      move.l #SSEG_PEN_WHITE, d1
+00000090                           113  .Cdraw
+00000090                           114      * set color
+00000090  7050                     115      move.l #SSEG_PEN_COLOR, d0
+00000092  4E4F                     116      trap #15
+00000094                           117      * set C segment parameters
+00000094  3205                     118      move.w d5, d1
+00000096  0641 0020                119      add.w #SSEG_LINE_LENGTH, d1
+0000009A  3605                     120      move.w d5, d3
+0000009C  3406                     121      move.w d6, d2
+0000009E  0644 0021                122      add.w #SSEG_LINE_LENGTH+1, d4
+000000A2  3806                     123      move.w d6, d4
+000000A4  0644 0042                124      add.w #(SSEG_LINE_LENGTH+1)*2, d4
+000000A8  7054                     125      move.l #SSEG_DRAW_LINE, d0
+000000AA  4E4F                     126      trap #15
+000000AC                           127      
+000000AC                           128      * check D segment
+000000AC  0807 0003                129      btst #3, d7
+000000B0  6600 0008                130      bne .Dwhite
+000000B4  7200                     131      move.l #SSEG_PEN_BLACK, d1
+000000B6  6000 0008                132      bra .Ddraw
+000000BA                           133  .Dwhite
+000000BA  223C 00FFFFFF            134      move.l #SSEG_PEN_WHITE, d1
+000000C0                           135  .Ddraw
+000000C0                           136      * set color
+000000C0  7050                     137      move.l #SSEG_PEN_COLOR, d0
+000000C2  4E4F                     138      trap #15
+000000C4                           139      * set B segment parameters
+000000C4                           140      
+000000C4                           141      * check E segment
+000000C4  0807 0004                142      btst #4, d7
+000000C8  6600 0008                143      bne .Ewhite
+000000CC  7200                     144      move.l #SSEG_PEN_BLACK, d1
+000000CE  6000 0008                145      bra .Edraw
+000000D2                           146  .Ewhite
+000000D2  223C 00FFFFFF            147      move.l #SSEG_PEN_WHITE, d1
+000000D8                           148  .Edraw
+000000D8                           149      * set color
+000000D8  7050                     150      move.l #SSEG_PEN_COLOR, d0
+000000DA  4E4F                     151      trap #15
+000000DC                           152      * set E segment parameters
+000000DC                           153      
+000000DC                           154      * check F segment
+000000DC  0807 0005                155      btst #5, d7
+000000E0  6600 0008                156      bne .Fwhite
+000000E4  7200                     157      move.l #SSEG_PEN_BLACK, d1
+000000E6  6000 0008                158      bra .Fdraw
+000000EA                           159  .Fwhite
+000000EA  223C 00FFFFFF            160      move.l #SSEG_PEN_WHITE, d1
+000000F0                           161  .Fdraw
+000000F0                           162      * set color
+000000F0  7050                     163      move.l #SSEG_PEN_COLOR, d0
+000000F2  4E4F                     164      trap #15
+000000F4                           165      * set F segment parameters
+000000F4                           166      
+000000F4                           167      * check G segment
+000000F4  0807 0006                168      btst #6, d7
+000000F8  6600 0008                169      bne .Gwhite
+000000FC  7200                     170      move.l #SSEG_PEN_BLACK, d1
+000000FE  6000 0008                171      bra .Gdraw
+00000102                           172  .Gwhite
+00000102  223C 00FFFFFF            173      move.l #SSEG_PEN_WHITE, d1
+00000108                           174  .Gdraw
+00000108                           175      * set color
+00000108  7050                     176      move.l #SSEG_PEN_COLOR, d0
+0000010A  4E4F                     177      trap #15
+0000010C                           178      * set G segment parameters
+0000010C                           179      
+0000010C  4CDF 04FC                180      movem.l (sp)+, .REGS
+00000110  4E75                     181      rts
+00000112                           182  
+00000112                           183  *---
+00000112                           184  * update the lives display
+00000112                           185  * 
+00000112                           186  * a3 - character object address
+00000112                           187  * 
+00000112                           188  *---
+00000112                           189  sseg_drawLives:
+00000112                           190      * read the number of lives from the character object
+Line 191 ERROR: Undefined symbol
+00000112  302B BD16                191      move.w CHAR_LIVES_OFFSET(a3), d0
+00000116  323C 0050                192      move.w #SSEG_LIVES_LEFT_X, d1
+0000011A  6100 FEF8                193      bsr sseg_drawDigit
+0000011E  4E75                     194      rts
+00000120                           195  
+00000120                           196  
+00000120                           197  *---
+00000120                           198  * update the score display
+00000120                           199  * 
+00000120                           200  *---
+00000120                           201  sseg_drawScore:
+00000120                           202  
+00000120                           203  
+00000120  4E75                     204      rts
+00000122                           205  
+00000122                           206  
+00000122                           207      ds.w 0
+00000122                           208  SSEG_SCORE    ds.l  1
+00000126                           209  
+00000126                           210  SSEG_ARRAY
+00000126                           211  
+00000126= 01                       212  SSEG_ZERO     dc.b  SSEG_A_SEG | SSEG_B_SEG | SSEG_C_SEG | SSEG_D_SEG | SSEG_E_SEG | SSEG_F_SEG
+00000127= 01                       213  SSEG_ONE      dc.b  SSEG_A_SEG | SSEG_B_SEG
+00000128= 01                       214  SSEG_TWO      dc.b  SSEG_A_SEG | SSEG_B_SEG | SSEG_D_SEG | SSEG_E_SEG | SSEG_G_SEG
+00000129= 01                       215  SSEG_THREE    dc.b  SSEG_A_SEG | SSEG_B_SEG | SSEG_C_SEG | SSEG_D_SEG | SSEG_G_SEG
+0000012A= 01                       216  SSEG_FOUR     dc.b  SSEG_B_SEG | SSEG_C_SEG | SSEG_F_SEG | SSEG_G_SEG
+0000012B= 01                       217  SSEG_FIVE     dc.b  SSEG_A_SEG | SSEG_C_SEG | SSEG_D_SEG | SSEG_F_SEG | SSEG_G_SEG
+0000012C= 01                       218  SSEG_SIX      dc.b  SSEG_A_SEG | SSEG_C_SEG | SSEG_D_SEG | SSEG_E_SEG | SSEG_F_SEG | SSEG_G_SEG
+0000012D= 01                       219  SSEG_SEV      dc.b  SSEG_A_SEG | SSEG_B_SEG | SSEG_C_SEG
+0000012E= 01                       220  SSEG_EIGHT    dc.b  SSEG_A_SEG | SSEG_B_SEG | SSEG_C_SEG | SSEG_D_SEG | SSEG_E_SEG | SSEG_F_SEG | SSEG_G_SEG
+0000012F= 01                       221  SSEG_NINE     dc.b  SSEG_A_SEG | SSEG_B_SEG | SSEG_C_SEG | SSEG_D_SEG | SSEG_F_SEG | SSEG_G_SEG
+00000130                           222  
+00000130                           223      ds.w 0
+Line 224 WARNING: END directive missing, starting address not set
+
+1 error detected
+1 warning generated
+
+
+SYMBOL TABLE INFORMATION
+Symbol-name         Value
+-------------------------
+SSEG_ARRAY          126
+SSEG_A_SEG          1
+SSEG_B_SEG          1
+SSEG_C_SEG          1
+SSEG_DIGIT_DISTANCE  8
+SSEG_DRAWDIGIT      14
+SSEG_DRAWDIGIT:ADRAW  3A
+SSEG_DRAWDIGIT:AWHITE  34
+SSEG_DRAWDIGIT:BDRAW  62
+SSEG_DRAWDIGIT:BWHITE  5C
+SSEG_DRAWDIGIT:CDRAW  90
+SSEG_DRAWDIGIT:CWHITE  8A
+SSEG_DRAWDIGIT:DDRAW  C0
+SSEG_DRAWDIGIT:DWHITE  BA
+SSEG_DRAWDIGIT:EDRAW  D8
+SSEG_DRAWDIGIT:EWHITE  D2
+SSEG_DRAWDIGIT:FDRAW  F0
+SSEG_DRAWDIGIT:FWHITE  EA
+SSEG_DRAWDIGIT:GDRAW  108
+SSEG_DRAWDIGIT:GWHITE  102
+SSEG_DRAWDIGIT:REGS  4FC
+SSEG_DRAWLIVES      112
+SSEG_DRAWSCORE      120
+SSEG_DRAW_LINE      54
+SSEG_D_SEG          1
+SSEG_EIGHT          12E
+SSEG_E_SEG          1
+SSEG_FIVE           12B
+SSEG_FOUR           12A
+SSEG_F_SEG          1
+SSEG_G_SEG          1
+SSEG_INIT           0
+SSEG_LINE_LENGTH    20
+SSEG_LIVES_LEFT_X   50
+SSEG_NINE           12F
+SSEG_ONE            127
+SSEG_PEN_BLACK      0
+SSEG_PEN_COLOR      50
+SSEG_PEN_WHITE      FFFFFF
+SSEG_SCORE          122
+SSEG_SCORE_LEFT_X   1E0
+SSEG_SEV            12D
+SSEG_SIX            12C
+SSEG_THREE          129
+SSEG_TOP_Y          194
+SSEG_TWO            128
+SSEG_ZERO           126

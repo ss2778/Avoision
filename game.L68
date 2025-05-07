@@ -1,0 +1,1962 @@
+00001A6E Starting Address
+Assembler used: EASy68K Editor/Assembler v5.16.01
+Created On: 12/23/2024 11:57:38 AM
+
+00000000                             1  *-----------------------------------------------------------
+00000000                             2  * Title      : Assembly Game (Avoision)
+00000000                             3  * Written by : Brandon Holtzman
+00000000                             4  * Date       : 10/6/24
+00000000                             5  * Description: Bullet Hell dodging game
+00000000                             6  *-----------------------------------------------------------
+00000000  =00000069                  7  LEFT_WALL                      EQU      105
+00000000  =0000022B                  8  RIGHT_WALL                     EQU      555
+00000000  =00000150                  9  FLOOR                          EQU      336
+00000000  =00001500                 10  FP_FLOOR                       EQU      $1500
+00000000  =0000004F                 11  CEILING                        EQU      79
+00000000                            12  
+00000000  =00000005                 13  FRAMES_BETWEEN_BULLETS         EQU      5
+00000000  =0000000A                 14  MAX_BULLET_NUMBER              EQU      10
+00000000                            15  * GRAVITY is in 12.4 fixed point format
+00000000  =00000002                 16  GRAVITY                        EQU      $2
+00000000                            17  
+00000000  =000249F0                 18  CYCLES_PER_FRAME               EQU      150000
+00000000  =0000001E                 19  CLEAR_CYCLES                   EQU      30
+00000000  =0000001F                 20  GET_CYCLES                     EQU      31
+00000000  =00000013                 21  GET_USER_INPUT                 EQU      19
+00000000  =00000052                 22  R_KEY                          EQU      82
+00000000  =0000005C                 23  DRAWING_MODE                   EQU      92
+00000000  =00000012                 24  WIDTH_OFFSET                   EQU      $12
+00000000  =00000016                 25  HEIGHT_OFFSET                  EQU      $16
+00000000  =00000011                 26  DOUBLE_BUFFERED_MODE           EQU      17
+00000000  =0000005E                 27  REPAINT_SCREEN                 EQU      94
+00000000  =00000021                 28  OUTPUT_RESOLUTION_TRAP_CODE    EQU      33
+00000000  =00000280                 29  OUTPUT_WIDTH                   EQU      640
+00000000  =000001E0                 30  OUTPUT_HEIGHT                  EQU      480
+00000000  =0000000D                 31  TASK_PRINT                     EQU      13
+00000000  =00C00200                 32  HEAP_SIZE                      EQU      $C00200
+00000000                            33  
+00001000                            34      ORG    $1000
+00001000                            35      ***
+00001000                            36      *** ALL 7SEG IMPLEMENTATION IS IN SEVSEG.X68
+00001000                            37      ***
+00001000                            38      INCLUDE "sevSeg.x68"
+00001000  =00000054                 39  SSEG_DRAW_LINE             EQU  84
+00001000                            40  
+00001000                            41  
+00001000  =00000001                 42  SSEG_A_SEG                 EQU  1<<0
+00001000  =00000002                 43  SSEG_B_SEG                 EQU  1<<1
+00001000  =00000004                 44  SSEG_C_SEG                 EQU  1<<2
+00001000  =00000008                 45  SSEG_D_SEG                 EQU  1<<3
+00001000  =00000010                 46  SSEG_E_SEG                 EQU  1<<4
+00001000  =00000020                 47  SSEG_F_SEG                 EQU  1<<5
+00001000  =00000040                 48  SSEG_G_SEG                 EQU  1<<6
+00001000                            49  
+00001000                            50  
+00001000  =00000050                 51  SSEG_PEN_COLOR             EQU  80
+00001000  =00FFFFFF                 52  SSEG_PEN_WHITE             EQU  $00FFFFFF
+00001000  =00000000                 53  SSEG_PEN_BLACK             EQU  0
+00001000                            54  
+00001000  =000001E0                 55  SSEG_SCORE_LEFT_X          EQU  480
+00001000  =00000050                 56  SSEG_LIVES_LEFT_X          EQU  80
+00001000  =00000194                 57  SSEG_TOP_Y                 EQU  404
+00001000  =00000020                 58  SSEG_LINE_LENGTH           EQU  32
+00001000  =00000008                 59  SSEG_DIGIT_DISTANCE        EQU  8
+00001000                            60  
+00001000                            61  sseg_init:
+00001000                            62      * initialize both values
+00001000  23FC 00000000 000011D0    63      move.l #0, SSEG_SCORE
+0000100A                            64      
+0000100A                            65      * call both draw functions
+0000100A  7000                      66      move.l #0, d0
+0000100C  6100 0172                 67      bsr sseg_drawScore
+00001010  6100 0160                 68      bsr sseg_drawLives
+00001014  4E75                      69      rts
+00001016                            70      
+00001016                            71  sseg_drawDigit:
+00001016                            72  .REGS  REG D2-D7/A2
+00001016  48E7 3F20                 73      movem.l .REGS, -(sp)
+0000101A                            74      * load the appropriate digit bitfield
+0000101A  45F9 000011D4             75      lea SSEG_ARRAY, a2
+00001020  1E32 0000                 76      move.b (a2, d0), d7
+00001024                            77      * load the highest y position of the digit
+00001024  3C3C 0194                 78      move.w #SSEG_TOP_Y, d6
+00001028                            79      
+00001028                            80      * check and draw each segment
+00001028                            81      * if it is active, draw it with a white pen color
+00001028                            82      * if inactive, draw it with a black pen color
+00001028                            83      
+00001028                            84      * check A segment
+00001028  0807 0000                 85      btst #0, d7
+0000102C  6600 0008                 86      bne .Awhite
+00001030  7200                      87      move.l #SSEG_PEN_BLACK, d1
+00001032  6000 0008                 88      bra .Adraw
+00001036                            89  .Awhite
+00001036  223C 00FFFFFF             90      move.l #SSEG_PEN_WHITE, d1
+0000103C                            91  .Adraw
+0000103C                            92      * set color
+0000103C  7050                      93      move.l #SSEG_PEN_COLOR, d0
+0000103E  4E4F                      94      trap #15
+00001040                            95      * set A segment parameters
+00001040  3205                      96      move.w d5, d1
+00001042  3605                      97      move.w d5, d3
+00001044  0643 0020                 98      add.w #SSEG_LINE_LENGTH, d3
+00001048  3406                      99      move.w d6, d2
+0000104A  3806                     100      move.w d6, d4
+0000104C  7054                     101      move.l #SSEG_DRAW_LINE, d0
+0000104E  4E4F                     102      trap #15
+00001050                           103      
+00001050                           104      * check B segment
+00001050  0807 0001                105      btst #1, d7
+00001054  6600 0008                106      bne .Bwhite
+00001058  7200                     107      move.l #SSEG_PEN_BLACK, d1
+0000105A  6000 0008                108      bra .Bdraw
+0000105E                           109  .Bwhite
+0000105E  223C 00FFFFFF            110      move.l #SSEG_PEN_WHITE, d1
+00001064                           111  .Bdraw
+00001064                           112      * set color
+00001064  7050                     113      move.l #SSEG_PEN_COLOR, d0
+00001066  4E4F                     114      trap #15
+00001068                           115      * set B segment parameters
+00001068  3205                     116      move.w d5, d1
+0000106A  0641 0020                117      add.w #SSEG_LINE_LENGTH, d1
+0000106E  3605                     118      move.w d5, d3
+00001070  0643 0020                119      add.w #SSEG_LINE_LENGTH, d3
+00001074  3406                     120      move.w d6, d2
+00001076  5242                     121      add.w #1, d2
+00001078  3806                     122      move.w d6, d4
+0000107A  0644 0021                123      add.w #SSEG_LINE_LENGTH+1, d4
+0000107E  7054                     124      move.l #SSEG_DRAW_LINE, d0
+00001080  4E4F                     125      trap #15
+00001082                           126      
+00001082                           127      * check C segment
+00001082  0807 0002                128      btst #2, d7
+00001086  6600 0008                129      bne .Cwhite
+0000108A  7200                     130      move.l #SSEG_PEN_BLACK, d1
+0000108C  6000 0008                131      bra .Cdraw
+00001090                           132  .Cwhite
+00001090  223C 00FFFFFF            133      move.l #SSEG_PEN_WHITE, d1
+00001096                           134  .Cdraw
+00001096                           135      * set color
+00001096  7050                     136      move.l #SSEG_PEN_COLOR, d0
+00001098  4E4F                     137      trap #15
+0000109A                           138      * set C segment parameters
+0000109A  3205                     139      move.w d5, d1
+0000109C  0641 0020                140      add.w #SSEG_LINE_LENGTH, d1
+000010A0  3605                     141      move.w d5, d3
+000010A2  0643 0020                142      add.w #SSEG_LINE_LENGTH, d3
+000010A6  3406                     143      move.w d6, d2
+000010A8  0642 0023                144      add.w #SSEG_LINE_LENGTH+3, d2
+000010AC  3806                     145      move.w d6, d4
+000010AE  0644 0043                146      add.w #(SSEG_LINE_LENGTH*2)+3, d4
+000010B2  7054                     147      move.l #SSEG_DRAW_LINE, d0
+000010B4  4E4F                     148      trap #15
+000010B6                           149      
+000010B6                           150      * check D segment
+000010B6  0807 0003                151      btst #3, d7
+000010BA  6600 0008                152      bne .Dwhite
+000010BE  7200                     153      move.l #SSEG_PEN_BLACK, d1
+000010C0  6000 0008                154      bra .Ddraw
+000010C4                           155  .Dwhite
+000010C4  223C 00FFFFFF            156      move.l #SSEG_PEN_WHITE, d1
+000010CA                           157  .Ddraw
+000010CA                           158      * set color
+000010CA  7050                     159      move.l #SSEG_PEN_COLOR, d0
+000010CC  4E4F                     160      trap #15
+000010CE                           161      * set D segment parameters
+000010CE  3205                     162      move.w d5, d1
+000010D0  3605                     163      move.w d5, d3
+000010D2  0643 0020                164      add.w #SSEG_LINE_LENGTH, d3
+000010D6  3406                     165      move.w d6, d2
+000010D8  0642 0044                166      add.w #(SSEG_LINE_LENGTH*2)+4, d2
+000010DC  3806                     167      move.w d6, d4
+000010DE  0644 0044                168      add.w #(SSEG_LINE_LENGTH*2)+4, d4
+000010E2  7054                     169      move.l #SSEG_DRAW_LINE, d0
+000010E4  4E4F                     170      trap #15
+000010E6                           171      
+000010E6                           172      * check E segment
+000010E6  0807 0004                173      btst #4, d7
+000010EA  6600 0008                174      bne .Ewhite
+000010EE  7200                     175      move.l #SSEG_PEN_BLACK, d1
+000010F0  6000 0008                176      bra .Edraw
+000010F4                           177  .Ewhite
+000010F4  223C 00FFFFFF            178      move.l #SSEG_PEN_WHITE, d1
+000010FA                           179  .Edraw
+000010FA                           180      * set color
+000010FA  7050                     181      move.l #SSEG_PEN_COLOR, d0
+000010FC  4E4F                     182      trap #15
+000010FE                           183      * set E segment parameters
+000010FE  3205                     184      move.w d5, d1
+00001100  3605                     185      move.w d5, d3
+00001102  3406                     186      move.w d6, d2
+00001104  0642 0023                187      add.w #SSEG_LINE_LENGTH+3, d2
+00001108  3806                     188      move.w d6, d4
+0000110A  0644 0043                189      add.w #(SSEG_LINE_LENGTH*2)+3, d4
+0000110E  7054                     190      move.l #SSEG_DRAW_LINE, d0
+00001110  4E4F                     191      trap #15
+00001112                           192      
+00001112                           193      * check F segment
+00001112  0807 0005                194      btst #5, d7
+00001116  6600 0008                195      bne .Fwhite
+0000111A  7200                     196      move.l #SSEG_PEN_BLACK, d1
+0000111C  6000 0008                197      bra .Fdraw
+00001120                           198  .Fwhite
+00001120  223C 00FFFFFF            199      move.l #SSEG_PEN_WHITE, d1
+00001126                           200  .Fdraw
+00001126                           201      * set color
+00001126  7050                     202      move.l #SSEG_PEN_COLOR, d0
+00001128  4E4F                     203      trap #15
+0000112A                           204      * set F segment parameters
+0000112A  3205                     205      move.w d5, d1
+0000112C  3605                     206      move.w d5, d3
+0000112E  3406                     207      move.w d6, d2
+00001130  5242                     208      add.w #1, d2
+00001132  3806                     209      move.w d6, d4
+00001134  0644 0021                210      add.w #SSEG_LINE_LENGTH+1, d4
+00001138  7054                     211      move.l #SSEG_DRAW_LINE, d0
+0000113A  4E4F                     212      trap #15
+0000113C                           213      
+0000113C                           214      * check G segment
+0000113C  0807 0006                215      btst #6, d7
+00001140  6600 0008                216      bne .Gwhite
+00001144  7200                     217      move.l #SSEG_PEN_BLACK, d1
+00001146  6000 0008                218      bra .Gdraw
+0000114A                           219  .Gwhite
+0000114A  223C 00FFFFFF            220      move.l #SSEG_PEN_WHITE, d1
+00001150                           221  .Gdraw
+00001150                           222      * set color
+00001150  7050                     223      move.l #SSEG_PEN_COLOR, d0
+00001152  4E4F                     224      trap #15
+00001154                           225      * set G segment parameters
+00001154  3205                     226      move.w d5, d1
+00001156  3605                     227      move.w d5, d3
+00001158  0643 0020                228      add.w #SSEG_LINE_LENGTH, d3
+0000115C  3406                     229      move.w d6, d2
+0000115E  0642 0022                230      add.w #SSEG_LINE_LENGTH+2, d2
+00001162  3806                     231      move.w d6, d4
+00001164  0644 0022                232      add.w #SSEG_LINE_LENGTH+2, d4
+00001168  7054                     233      move.l #SSEG_DRAW_LINE, d0
+0000116A  4E4F                     234      trap #15
+0000116C                           235      
+0000116C  4CDF 04FC                236      movem.l (sp)+, .REGS
+00001170  4E75                     237      rts
+00001172                           238  
+00001172                           239  sseg_drawLives:
+00001172                           240      * read the number of lives from the character object
+00001172  302B 0008                241      move.w CHAR_LIFE_OFFSET(a3), d0
+00001176  3A3C 0050                242      move.w #SSEG_LIVES_LEFT_X, d5
+0000117A  6100 FE9A                243      bsr sseg_drawDigit
+0000117E  4E75                     244      rts
+00001180                           245  
+00001180                           246  
+00001180                           247  sseg_drawScore:
+00001180                           248  .REGS  REG D2
+00001180  48E7 2000                249      movem.l .REGS, -(sp)
+00001184  D1B9 000011D0            250      add.l d0, SSEG_SCORE
+0000118A                           251      
+0000118A                           252      * draw the first digit of the score
+0000118A  2439 000011D0            253      move.l SSEG_SCORE, d2
+00001190  84FC 000A                254      divu #10, d2
+00001194  4842                     255      swap d2
+00001196  3002                     256      move.w d2, d0
+00001198  3A3C 01E0                257      move.w #SSEG_SCORE_LEFT_X, d5
+0000119C  6100 FE78                258      bsr sseg_drawDigit
+000011A0                           259      * draw the second digit of the score
+000011A0  343C 0000                260      move.w #0, d2
+000011A4  4842                     261      swap d2
+000011A6  84FC 000A                262      divu #10, d2
+000011AA  4842                     263      swap d2
+000011AC  3002                     264      move.w d2, d0
+000011AE  0445 0028                265      sub.w #SSEG_LINE_LENGTH+SSEG_DIGIT_DISTANCE, d5
+000011B2  6100 FE62                266      bsr sseg_drawDigit
+000011B6                           267      * draw the third digit of the score
+000011B6  2439 000011D0            268      move.l SSEG_SCORE, d2
+000011BC  84FC 0064                269      divu #100, d2
+000011C0  3002                     270      move.w d2, d0
+000011C2  0445 0028                271      sub.w #SSEG_LINE_LENGTH+SSEG_DIGIT_DISTANCE, d5
+000011C6  6100 FE4E                272      bsr sseg_drawDigit
+000011CA                           273      
+000011CA  4CDF 0004                274      movem.l (sp)+, .REGS
+000011CE  4E75                     275      rts
+000011D0                           276  
+000011D0                           277  
+000011D0                           278      ds.w 0
+000011D0                           279  SSEG_SCORE    ds.l  1
+000011D4                           280  
+000011D4                           281  SSEG_ARRAY
+000011D4                           282  
+000011D4= 3F                       283  SSEG_ZERO     dc.b  SSEG_A_SEG|SSEG_B_SEG|SSEG_C_SEG|SSEG_D_SEG|SSEG_E_SEG|SSEG_F_SEG
+000011D5= 06                       284  SSEG_ONE      dc.b  SSEG_B_SEG|SSEG_C_SEG
+000011D6= 5B                       285  SSEG_TWO      dc.b  SSEG_A_SEG|SSEG_B_SEG|SSEG_D_SEG|SSEG_E_SEG|SSEG_G_SEG
+000011D7= 4F                       286  SSEG_THREE    dc.b  SSEG_A_SEG|SSEG_B_SEG|SSEG_C_SEG|SSEG_D_SEG|SSEG_G_SEG
+000011D8= 66                       287  SSEG_FOUR     dc.b  SSEG_B_SEG|SSEG_C_SEG|SSEG_F_SEG|SSEG_G_SEG
+000011D9= 6D                       288  SSEG_FIVE     dc.b  SSEG_A_SEG|SSEG_C_SEG|SSEG_D_SEG|SSEG_F_SEG|SSEG_G_SEG
+000011DA= 7D                       289  SSEG_SIX      dc.b  SSEG_A_SEG|SSEG_C_SEG|SSEG_D_SEG|SSEG_E_SEG|SSEG_F_SEG|SSEG_G_SEG
+000011DB= 07                       290  SSEG_SEV      dc.b  SSEG_A_SEG|SSEG_B_SEG|SSEG_C_SEG
+000011DC= 7F                       291  SSEG_EIGHT    dc.b  SSEG_A_SEG|SSEG_B_SEG|SSEG_C_SEG|SSEG_D_SEG|SSEG_E_SEG|SSEG_F_SEG|SSEG_G_SEG
+000011DD= 6F                       292  SSEG_NINE     dc.b  SSEG_A_SEG|SSEG_B_SEG|SSEG_C_SEG|SSEG_D_SEG|SSEG_F_SEG|SSEG_G_SEG
+000011DE                           293  
+000011DE                           294      ds.w 0
+000011DE                           295  -------------------- end include --------------------
+000011DE                           296      INCLUDE "bullet.x68"
+000011DE  =00000014                297  BULL_SIZE            EQU   20
+000011DE  =00000000                298  BULL_ACTIVE_OFFSET   EQU   0
+000011DE  =00000002                299  BULL_TYPE_OFFSET     EQU   2
+000011DE  =00000004                300  BULL_X_POS_OFFSET    EQU   4
+000011DE  =00000006                301  BULL_X_VEL_OFFSET    EQU   6
+000011DE  =00000008                302  BULL_Y_POS_OFFSET    EQU   8
+000011DE  =0000000A                303  BULL_FP_Y_POS_OFFSET EQU   10
+000011DE  =0000000C                304  BULL_Y_VEL_OFFSET    EQU   12
+000011DE  =0000000E                305  BULL_START_OFFSET    EQU   14
+000011DE  =00000010                306  BULL_CENTER_X_OFFSET EQU   16
+000011DE  =00000012                307  BULL_CENTER_Y_OFFSET EQU   18
+000011DE                           308  
+000011DE  =00000012                309  BULL_WIDTH_OFFSET    EQU  $12
+000011DE  =00000016                310  BULL_HEIGHT_OFFSET   EQU  $16
+000011DE                           311  
+000011DE  =00000007                312  BULL_DIMENSION       EQU   7
+000011DE  =00000003                313  BULL_HALF_DIMENSION  EQU   3
+000011DE  =00000003                314  BULL_MAX_SPEED       EQU   3
+000011DE  =00000001                315  BULL_MIN_SPEED       EQU   1
+000011DE                           316  
+000011DE  =00000008                317  BULL_GET_TIME        EQU   8
+000011DE                           318  
+000011DE                           319  
+000011DE                           320  bull_createBulletList:
+000011DE                           321  .REGS  REG D2/A2
+000011DE  48E7 2020                322      movem.l .REGS, -(sp)
+000011E2                           323      * find the number of bytes to allocate
+000011E2  7214                     324      move.l #BULL_SIZE, d1
+000011E4  C2C0                     325      mulu d0, d1
+000011E6  2401                     326      move.l d1, d2
+000011E8                           327      * allocate the memory
+000011E8  6100 0774                328      bsr mem_Alloc
+000011EC  4A00                     329      tst.b d0
+000011EE  6600 0040                330      bne .error
+000011F2                           331      
+000011F2                           332      * set every bullet to inactive
+000011F2  2248                     333      move.l a0, a1
+000011F4  2448                     334      move.l a0, a2
+000011F6  D488                     335      add.l a0, d2
+000011F8                           336  .inactLoop
+000011F8  337C 0000 0000           337      move.w #0, BULL_ACTIVE_OFFSET(a1)
+000011FE  D3FC 00000014            338      add.l #BULL_SIZE, a1
+00001204                           339      * check if end of list has been reached
+00001204  B3C2                     340      cmp.l d2, a1
+00001206  6DF0                     341      blt .inactLoop
+00001208                           342      
+00001208                           343      * seed the random number generator
+00001208                           344      * This code is shamelessly recycled from Jeremy's RandomNumbers.x68 file
+00001208                           345  
+00001208  103C 0008                346      move.b #BULL_GET_TIME, d0
+0000120C  4E4F                     347      trap #15
+0000120E  23C1 0000153A            348      move.l d1, BULL_RANDOMVAL
+00001214                           349      
+00001214                           350      * load the bullet bitmap and store the address in BULL_ART_ADDR label
+00001214  224C                     351      move.l a4, a1
+00001216  6100 0516                352      bsr bmp_Load
+0000121A  4A00                     353      tst.b d0
+0000121C  6600 0012                354      bne .error
+00001220  23C8 0000153E            355      move.l a0, BULL_ART_ADDR
+00001226                           356      * restore list address to output register
+00001226  204A                     357      move.l a2, a0
+00001228                           358      
+00001228  103C 0000                359      move.b #0, d0
+0000122C  6000 0006                360      bra .done
+00001230                           361  .error
+00001230  103C 0001                362      move.b #1, d0
+00001234                           363  .done
+00001234  4CDF 0404                364      movem.l (sp)+, .REGS
+00001238  4E75                     365      rts
+0000123A                           366  
+0000123A                           367  bull_eraseBullets:
+0000123A                           368  .REGS  REG D2-D3/A3
+0000123A  48E7 3010                369      movem.l .REGS, -(sp)
+0000123E  7214                     370      move.l #BULL_SIZE, d1
+00001240  2002                     371      move.l d2, d0
+00001242  C2C0                     372      mulu d0, d1
+00001244  2601                     373      move.l d1, d3
+00001246                           374      
+00001246  264C                     375      move.l a4, a3
+00001248  D68C                     376      add.l a4, d3
+0000124A                           377  .searchLoop
+0000124A  322B 0000                378      move.w BULL_ACTIVE_OFFSET(a3), d1
+0000124E  4A41                     379      tst.w d1
+00001250  6600 0010                380      bne .activeFound
+00001254                           381  .returnToLoop
+00001254  D7FC 00000014            382      add.l #BULL_SIZE, a3
+0000125A                           383      * check if end of list has been reached
+0000125A  B7C3                     384      cmp.l d3, a3
+0000125C  6DEC                     385      blt .searchLoop
+0000125E  6000 0020                386      bra .done
+00001262                           387  
+00001262                           388      * erase the active bullet
+00001262                           389  .activeFound
+00001262  322B 0004                390      move.w BULL_X_POS_OFFSET(a3), d1
+00001266  4841                     391      swap d1
+00001268  322B 0008                392      move.w BULL_Y_POS_OFFSET(a3), d1
+0000126C  2001                     393      move.l d1, d0
+0000126E  224A                     394      move.l a2, a1
+00001270  343C 0007                395      move.w #BULL_DIMENSION, d2
+00001274  4842                     396      swap d2
+00001276  343C 0007                397      move.w #BULL_DIMENSION, d2
+0000127A  6100 055C                398      bsr bmp_Draw
+0000127E  60D4                     399      bra .returnToLoop
+00001280                           400      
+00001280                           401  .done
+00001280  4CDF 080C                402      movem.l (sp)+, .REGS
+00001284  4E75                     403      rts
+00001286                           404      
+00001286                           405  
+00001286                           406  bull_destroy:
+00001286                           407  .REGS  REG D3/A2
+00001286  48E7 1020                408      movem.l .REGS, -(sp)
+0000128A  7214                     409      move.l #BULL_SIZE, d1
+0000128C  2002                     410      move.l d2, d0
+0000128E  C2C0                     411      mulu d0, d1
+00001290  2601                     412      move.l d1, d3
+00001292                           413      
+00001292  244C                     414      move.l a4, a2
+00001294  D68C                     415      add.l a4, d3
+00001296                           416  .searchLoop
+00001296  322A 0000                417      move.w BULL_ACTIVE_OFFSET(a2), d1
+0000129A  4A41                     418      tst.w d1
+0000129C  6600 0014                419      bne .activeFound
+000012A0                           420  .returnToLoop
+000012A0  D5FC 00000014            421      add.l #BULL_SIZE, a2
+000012A6                           422      * check if end of list has been reached
+000012A6  B5C3                     423      cmp.l d3, a2
+000012A8  6DEC                     424      blt .searchLoop
+000012AA  103C 0000                425      move.b #0, d0
+000012AE  6000 000A                426      bra .done
+000012B2                           427  
+000012B2                           428      * deactivate the bullet
+000012B2                           429  .activeFound
+000012B2  357C 0000 0000           430      move.w #0, BULL_ACTIVE_OFFSET(a2)
+000012B8  60E6                     431      bra .returnToLoop
+000012BA                           432  
+000012BA                           433  .done
+000012BA  4CDF 0408                434      movem.l (sp)+, .REGS
+000012BE  4E75                     435      rts
+000012C0                           436      
+000012C0                           437  bull_checkHit:
+000012C0                           438  .REGS  REG D2-D3/A2
+000012C0  48E7 3020                439      movem.l .REGS, -(sp)
+000012C4  7214                     440      move.l #BULL_SIZE, d1
+000012C6  2002                     441      move.l d2, d0
+000012C8  C2C0                     442      mulu d0, d1
+000012CA  2601                     443      move.l d1, d3
+000012CC                           444      
+000012CC  244C                     445      move.l a4, a2
+000012CE  D68C                     446      add.l a4, d3
+000012D0                           447  .searchLoop
+000012D0  322A 0000                448      move.w BULL_ACTIVE_OFFSET(a2), d1
+000012D4  4A41                     449      tst.w d1
+000012D6  6600 0014                450      bne .activeFound
+000012DA                           451  .returnToLoop
+000012DA  D5FC 00000014            452      add.l #BULL_SIZE, a2
+000012E0                           453      * check if end of list has been reached
+000012E0  B5C3                     454      cmp.l d3, a2
+000012E2  6DEC                     455      blt .searchLoop
+000012E4  103C 0000                456      move.b #0, d0
+000012E8  6000 0052                457      bra .done
+000012EC                           458  
+000012EC                           459      * check for collision with the character
+000012EC                           460  .activeFound
+000012EC  7400                     461      move.l #0, d2
+000012EE                           462      * check distance in the x direction
+000012EE  342A 0010                463      move.w BULL_CENTER_X_OFFSET(a2), d2
+000012F2  946B 000E                464      sub.w CHAR_CENTER_X_OFFSET(a3), d2
+000012F6                           465      * ensure the value is non negative
+000012F6  B47C 0000                466      cmp.w #0, d2
+000012FA  6E00 0004                467      bgt .nonNegX
+000012FE  4442                     468      neg.w d2
+00001300                           469  .nonNegX
+00001300                           470      * check distance between the centers
+00001300  946B 000C                471      sub.w CHAR_HALF_WIDTH_OFFSET(a3), d2
+00001304  5742                     472      sub.w #BULL_HALF_DIMENSION, d2
+00001306                           473      * if it is non-negative, the boxes are not colliding
+00001306  B47C 0000                474      cmp.w #0, d2
+0000130A  6CCE                     475      bge .returnToLoop
+0000130C                           476      
+0000130C                           477      * check distance in the y direction
+0000130C  342A 0012                478      move.w BULL_CENTER_Y_OFFSET(a2), d2
+00001310  946B 0010                479      sub.w CHAR_CENTER_Y_OFFSET(a3), d2
+00001314                           480      * ensure the value is non negative
+00001314  B47C 0000                481      cmp.w #0, d2
+00001318  6E00 0004                482      bgt .nonNegY
+0000131C  4442                     483      neg.w d2
+0000131E                           484  .nonNegY
+0000131E  946B 000A                485      sub.w CHAR_HALF_HEIGHT_OFFSET(a3), d2
+00001322  5742                     486      sub.w #BULL_HALF_DIMENSION, d2
+00001324                           487      * if it is non-negative, the boxes are not colliding
+00001324  B47C 0000                488      cmp.w #0, d2
+00001328  6CB0                     489      bge .returnToLoop
+0000132A                           490      
+0000132A                           491      * if no branch was taken, the current bullet and the player have collided
+0000132A                           492      * deal damage to the player
+0000132A  6100 02FA                493      bsr char_dmg
+0000132E                           494      * check if the player died
+0000132E  4A00                     495      tst.b d0
+00001330  6600 000A                496      bne .done
+00001334                           497      
+00001334  357C 0000 0000           498      move.w #0, BULL_ACTIVE_OFFSET(a2)
+0000133A  609E                     499      bra .returnToLoop
+0000133C                           500  .done
+0000133C  4CDF 040C                501      movem.l (sp)+, .REGS
+00001340  4E75                     502      rts    
+00001342                           503      
+00001342                           504  
+00001342                           505  bull_drawBullets:
+00001342                           506  .REGS  REG D2-D3/A3
+00001342  48E7 3010                507      movem.l .REGS, -(sp)
+00001346  7214                     508      move.l #BULL_SIZE, d1
+00001348  2002                     509      move.l d2, d0
+0000134A  C2C0                     510      mulu d0, d1
+0000134C  2601                     511      move.l d1, d3
+0000134E                           512      
+0000134E  264C                     513      move.l a4, a3
+00001350  D68C                     514      add.l a4, d3
+00001352                           515  .searchLoop
+00001352  322B 0000                516      move.w BULL_ACTIVE_OFFSET(a3), d1
+00001356  4A41                     517      tst.w d1
+00001358  6600 0010                518      bne .activeFound
+0000135C                           519  .returnToLoop
+0000135C  D7FC 00000014            520      add.l #BULL_SIZE, a3
+00001362                           521      * check if end of list has been reached
+00001362  B7C3                     522      cmp.l d3, a3
+00001364  6DEC                     523      blt .searchLoop
+00001366  6000 0024                524      bra .done
+0000136A                           525  
+0000136A                           526      * draw the active bullet
+0000136A                           527  .activeFound
+0000136A  2279 0000153E            528      move.l BULL_ART_ADDR, a1
+00001370  322B 0004                529      move.w BULL_X_POS_OFFSET(a3), d1
+00001374  4841                     530      swap d1
+00001376  322B 0008                531      move.w BULL_Y_POS_OFFSET(a3), d1
+0000137A  7000                     532      move.l #0, d0
+0000137C  343C 0007                533      move.w #BULL_DIMENSION, d2
+00001380  4842                     534      swap d2
+00001382  343C 0007                535      move.w #BULL_DIMENSION, d2
+00001386  6100 0450                536      bsr bmp_Draw
+0000138A  60D0                     537      bra .returnToLoop
+0000138C                           538  .done
+0000138C  4CDF 080C                539      movem.l (sp)+, .REGS
+00001390  4E75                     540      rts
+00001392                           541  
+00001392                           542  bull_move:
+00001392                           543  .REGS  REG D2-D4/A2-A3
+00001392  48E7 3830                544      movem.l .REGS, -(sp)
+00001396  7214                     545      move.l #BULL_SIZE, d1
+00001398  2002                     546      move.l d2, d0
+0000139A  C2C0                     547      mulu d0, d1
+0000139C  2601                     548      move.l d1, d3
+0000139E                           549      
+0000139E  7000                     550      move.l #0, d0
+000013A0                           551      
+000013A0  264C                     552      move.l a4, a3
+000013A2  D68C                     553      add.l a4, d3
+000013A4                           554  .searchLoop
+000013A4  322B 0000                555      move.w BULL_ACTIVE_OFFSET(a3), d1
+000013A8  4A41                     556      tst.w d1
+000013AA  6600 0010                557      bne .activeFound
+000013AE                           558  .returnToLoop
+000013AE  D7FC 00000014            559      add.l #BULL_SIZE, a3
+000013B4                           560      * check if end of list has been reached
+000013B4  B7C3                     561      cmp.l d3, a3
+000013B6  6DEC                     562      blt .searchLoop
+000013B8  6000 008C                563      bra .done
+000013BC                           564      
+000013BC                           565      * move the active bullet
+000013BC                           566  .activeFound
+000013BC  7400                     567      move.l #0, d2
+000013BE                           568      * check the direction the bullet is moving
+000013BE  342B 000E                569      move.w BULL_START_OFFSET(a3), d2
+000013C2  4A42                     570      tst.w d2
+000013C4  6600 0022                571      bne .moveRight
+000013C8                           572      * adjust its position accordingly
+000013C8                           573      
+000013C8                           574      * move the bullet to the left
+000013C8  342B 0006                575      move.w BULL_X_VEL_OFFSET(a3), d2
+000013CC  956B 0004                576      sub.w d2, BULL_X_POS_OFFSET(a3)
+000013D0                           577      * move the bullet center x
+000013D0  956B 0010                578      sub.w d2, BULL_CENTER_X_OFFSET(a3)
+000013D4                           579      
+000013D4                           580      * check for left wall collision
+000013D4  0C6B 0069 0004           581      cmp.w #LEFT_WALL, BULL_X_POS_OFFSET(a3)
+000013DA  6E00 002C                582      bgt .bounceCheck
+000013DE                           583      * if the bullet collides, disable it and give the user a point
+000013DE  377C 0000 0000           584      move.w #0, BULL_ACTIVE_OFFSET(a3)
+000013E4  5280                     585      add.l #1, d0
+000013E6  60C6                     586      bra .returnToLoop
+000013E8                           587      * move the bullet to the right
+000013E8                           588  .moveRight
+000013E8  342B 0006                589      move.w BULL_X_VEL_OFFSET(a3), d2
+000013EC  D56B 0004                590      add.w d2, BULL_X_POS_OFFSET(a3)
+000013F0                           591      
+000013F0                           592      * move the bullet center x
+000013F0  D56B 0010                593      add.w d2, BULL_CENTER_X_OFFSET(a3)
+000013F4                           594      
+000013F4                           595      * check for right wall collision
+000013F4  0C6B 0224 0004           596      cmp.w #RIGHT_WALL-BULL_DIMENSION, BULL_X_POS_OFFSET(a3)
+000013FA  6D00 000C                597      blt .bounceCheck
+000013FE                           598      * if the bullet collides, disable it and give the user a point
+000013FE  377C 0000 0000           599      move.w #0, BULL_ACTIVE_OFFSET(a3)
+00001404  5280                     600      add.l #1, d0
+00001406  60A6                     601      bra .returnToLoop
+00001408                           602      * check if the bullet bounces or not
+00001408                           603  .bounceCheck
+00001408                           604      * if the bullet does not bounce, branch back to the loop
+00001408  4A6B 0002                605      tst.w BULL_TYPE_OFFSET(a3)
+0000140C  67A0                     606      beq .returnToLoop
+0000140E                           607      
+0000140E                           608      * add gravity to the bullet's y velocity
+0000140E  546B 000C                609      add.w #GRAVITY, BULL_Y_VEL_OFFSET(a3)
+00001412                           610      
+00001412                           611      * derive ground y value in 12.4 fixed point
+00001412  7800                     612      move.l #0, d4
+00001414  383C 0149                613      move.w #FLOOR-BULL_DIMENSION, d4
+00001418  E94C                     614      lsl.w #4, d4
+0000141A                           615      * check for ground collision
+0000141A  342B 000C                616      move.w BULL_Y_VEL_OFFSET(a3), d2
+0000141E  D46B 000A                617      add.w BULL_FP_Y_POS_OFFSET(a3), d2
+00001422                           618      
+00001422  B444                     619      cmp.w d4, d2
+00001424  6D00 0008                620      blt .airborne
+00001428                           621      * if on/below ground, move position to the ground
+00001428                           622      * and negate velocity
+00001428  3404                     623      move.w d4, d2
+0000142A  446B 000C                624      neg.w BULL_Y_VEL_OFFSET(a3)
+0000142E                           625      
+0000142E                           626  .airborne
+0000142E                           627      * save the fixed point position
+0000142E  3742 000A                628      move.w d2, BULL_FP_Y_POS_OFFSET(a3)
+00001432                           629      * round the fixed point (12.4) value
+00001432  5042                     630      add.w #8, d2
+00001434  E84A                     631      lsr.w #4, d2
+00001436  3742 0008                632      move.w d2, BULL_Y_POS_OFFSET(a3)
+0000143A                           633      
+0000143A                           634      * update center y position
+0000143A  5642                     635      add.w #BULL_HALF_DIMENSION, d2
+0000143C  5242                     636      add.w #1, d2
+0000143E  3742 0012                637      move.w d2, BULL_CENTER_Y_OFFSET(a3)
+00001442                           638      
+00001442                           639      
+00001442  6000 FF6A                640      bra .returnToLoop
+00001446                           641  
+00001446                           642  
+00001446                           643  .done
+00001446  4CDF 0C1C                644      movem.l (sp)+, .REGS
+0000144A  4E75                     645      rts
+0000144C                           646  
+0000144C                           647  bull_createBullet:
+0000144C                           648  .REGS  REG D2
+0000144C  48E7 2000                649      movem.l .REGS, -(sp)
+00001450                           650      * find an inactive bullet
+00001450  2002                     651      move.l d2, d0
+00001452  7214                     652      move.l #BULL_SIZE, d1
+00001454  C2C0                     653      mulu d0, d1
+00001456  2401                     654      move.l d1, d2
+00001458                           655      
+00001458  224C                     656      move.l a4, a1
+0000145A  D48C                     657      add.l a4, d2
+0000145C                           658  .searchLoop
+0000145C  3229 0000                659      move.w BULL_ACTIVE_OFFSET(a1), d1
+00001460  4A41                     660      tst.w d1
+00001462  6700 0010                661      beq .inactiveFound
+00001466  D3FC 00000014            662      add.l #BULL_SIZE, a1
+0000146C                           663      * check if end of list has been reached
+0000146C  B3C2                     664      cmp.l d2, a1
+0000146E  6DEC                     665      blt .searchLoop
+00001470  6000 0086                666      bra .allActive
+00001474                           667  .inactiveFound
+00001474                           668      * set active
+00001474  337C 0001 0000           669      move.w #1, BULL_ACTIVE_OFFSET(a1)
+0000147A                           670      * generate bullet type
+0000147A  7000                     671      move.l #0, d0
+0000147C  7201                     672      move.l #1, d1
+0000147E  6100 0082                673      bsr bull_randNum
+00001482  3340 0002                674      move.w d0, BULL_TYPE_OFFSET(a1)
+00001486                           675      * generate bullet start height
+00001486  704F                     676      move.l #CEILING, d0
+00001488  223C 00000149            677      move.l #FLOOR-BULL_DIMENSION, d1
+0000148E  6100 0072                678      bsr bull_randNum
+00001492  3340 0008                679      move.w d0, BULL_Y_POS_OFFSET(a1)
+00001496  E948                     680      lsl.w #4, d0
+00001498  3340 000A                681      move.w d0, BULL_FP_Y_POS_OFFSET(a1)
+0000149C                           682      * assign y velocity of 0
+0000149C  337C 0000 000C           683      move.w #0, BULL_Y_VEL_OFFSET(a1)
+000014A2                           684      * generate bullet speed
+000014A2  7001                     685      move.l #BULL_MIN_SPEED, d0
+000014A4  7203                     686      move.l #BULL_MAX_SPEED, d1
+000014A6  6100 005A                687      bsr bull_randNum
+000014AA  3340 0006                688      move.w d0, BULL_X_VEL_OFFSET(a1)
+000014AE                           689      * generate starting wall
+000014AE  7000                     690      move.l #0, d0
+000014B0  7201                     691      move.l #1, d1
+000014B2  6100 004E                692      bsr bull_randNum
+000014B6  4A40                     693      tst.w d0
+000014B8  6700 0012                694      beq .leftWall
+000014BC                           695      * start from the right wall
+000014BC  337C 0224 0004           696      move.w #RIGHT_WALL-BULL_DIMENSION, BULL_X_POS_OFFSET(a1)
+000014C2  337C 0000 000E           697      move.w #0, BULL_START_OFFSET(a1)
+000014C8  6000 000E                698      bra .center
+000014CC                           699  .leftWall
+000014CC  337C 0069 0004           700      move.w #LEFT_WALL, BULL_X_POS_OFFSET(a1)
+000014D2  337C 0001 000E           701      move.w #1, BULL_START_OFFSET(a1)
+000014D8                           702  
+000014D8                           703      * find the center of the bullet
+000014D8                           704  .center
+000014D8  303C 0004                705      move.w #BULL_HALF_DIMENSION+1, d0
+000014DC  D069 0004                706      add.w BULL_X_POS_OFFSET(a1), d0
+000014E0  3340 0010                707      move.w d0, BULL_CENTER_X_OFFSET(a1)
+000014E4  303C 0004                708      move.w #BULL_HALF_DIMENSION+1, d0
+000014E8  D069 0008                709      add.w BULL_Y_POS_OFFSET(a1), d0
+000014EC  3340 0012                710      move.w d0, BULL_CENTER_Y_OFFSET(a1)
+000014F0  103C 0000                711      move.b #0, d0
+000014F4  6000 0006                712      bra .done
+000014F8                           713  .allActive
+000014F8  103C 0001                714      move.b #1, d0
+000014FC                           715  .done
+000014FC  4CDF 0004                716      movem.l (sp)+, .REGS
+00001500  4E75                     717      rts
+00001502                           718      
+00001502                           719  
+00001502                           720  bull_randNum:
+00001502                           721  .REGS  REG D2-D4
+00001502  48E7 3800                722      movem.l .REGS, -(sp)
+00001506                           723      *** Code shamelessly recycled from Jeremy's RandomNumbers.x68 file
+00001506  3600                     724      move.w d0, d3
+00001508  3801                     725      move.w d1, d4
+0000150A  5244                     726      add.w #1, d4
+0000150C  9843                     727      sub.w d3, d4
+0000150E                           728      
+0000150E  2039 0000153A            729      move.l BULL_RANDOMVAL, d0
+00001514  72AF                     730      moveq #$AF-$100, d1
+00001516  7412                     731      moveq #18, d2
+00001518                           732  .Ninc0  
+00001518  D080                     733      add.l d0, d0
+0000151A  6400 0004                734      bcc .Ninc1
+0000151E  B300                     735      eor.b d1, d0
+00001520                           736  .Ninc1
+00001520  51CA FFF6                737      dbf d2, .Ninc0
+00001524                           738      
+00001524  23C0 0000153A            739      move.l d0, BULL_RANDOMVAL
+0000152A                           740  
+0000152A  1400                     741      move.b d0, d2
+0000152C  84C4                     742      divu d4, d2
+0000152E  4842                     743      swap d2
+00001530  D642                     744      add.w d2, d3
+00001532  3003                     745      move.w d3, d0
+00001534                           746  .done
+00001534  4CDF 001C                747      movem.l (sp)+, .REGS
+00001538  4E75                     748      rts
+0000153A                           749  
+0000153A                           750  
+0000153A                           751  BULL_RANDOMVAL  ds.l 1
+0000153E                           752  BULL_ART_ADDR   ds.l 1
+00001542                           753  
+00001542                           754  
+00001542                           755  
+00001542                           756  
+00001542                           757  
+00001542                           758  -------------------- end include --------------------
+00001542                           759      INCLUDE "character.x68"
+00001542  =00000016                760  CHAR_SIZE                    EQU  22
+00001542  =00000000                761  CHAR_X_POS_OFFSET            EQU  0
+00001542  =00000002                762  CHAR_Y_POS_OFFSET            EQU  2
+00001542  =00000004                763  CHAR_FP_Y_POS_OFFSET         EQU  4
+00001542  =00000006                764  CHAR_Y_VEL_OFFSET            EQU  6
+00001542  =00000008                765  CHAR_LIFE_OFFSET             EQU  8
+00001542  =0000000A                766  CHAR_HALF_HEIGHT_OFFSET      EQU  10
+00001542  =0000000C                767  CHAR_HALF_WIDTH_OFFSET       EQU  12
+00001542  =0000000E                768  CHAR_CENTER_X_OFFSET         EQU  14
+00001542  =00000010                769  CHAR_CENTER_Y_OFFSET         EQU  16
+00001542  =00000012                770  CHAR_ART_ADDR_OFFSET         EQU  18
+00001542                           771  
+00001542  =00000003                772  CHAR_MOVE_SPEED              EQU  3
+00001542  =00000057                773  CHAR_W_KEY                   EQU  $57
+00001542  =00000041                774  CHAR_A_KEY                   EQU  $41
+00001542  =00000044                775  CHAR_D_KEY                   EQU  $44
+00001542  =00000013                776  CHAR_GET_USER_INPUT          EQU  19
+00001542  =00000012                777  CHAR_WIDTH_OFFSET            EQU  $12
+00001542  =00000016                778  CHAR_HEIGHT_OFFSET           EQU  $16
+00001542  =00000077                779  CHAR_JUMP_SPEED              EQU  $77
+00001542                           780  
+00001542  =00000140                781  CHAR_START_X                 EQU  320
+00001542  =000000F0                782  CHAR_START_Y                 EQU  240
+00001542  =00000003                783  CHAR_LIVES                   EQU  3
+00001542                           784  char_createChar:
+00001542                           785  .REGS  REG A2
+00001542  48E7 0020                786      movem.l .REGS, -(sp)
+00001546                           787      * Store file name
+00001546  2449                     788      move.l a1, a2
+00001548                           789      * allocate memory for the character object
+00001548  7216                     790      move.l #CHAR_SIZE, d1
+0000154A  6100 0412                791      bsr mem_Alloc
+0000154E  4A00                     792      tst.b d0
+00001550  6600 005C                793      bne .error
+00001554  224A                     794      move.l a2, a1
+00001556  2448                     795      move.l a0, a2
+00001558                           796      * load the character art into memory
+00001558  6100 01D4                797      bsr bmp_Load
+0000155C  4A00                     798      tst.b d0
+0000155E  6600 004E                799      bne .error
+00001562  2548 0012                800      move.l a0, CHAR_ART_ADDR_OFFSET(a2)
+00001566                           801      * initialize values
+00001566  357C 0140 0000           802      move.w #CHAR_START_X, CHAR_X_POS_OFFSET(a2)
+0000156C  357C 00F0 0002           803      move.w #CHAR_START_Y, CHAR_Y_POS_OFFSET(a2)
+00001572  357C 0000 0006           804      move.w #0, CHAR_Y_VEL_OFFSET(a2)
+00001578  357C 0F00 0004           805      move.w #$F00, CHAR_FP_Y_POS_OFFSET(a2)
+0000157E  3028 0012                806      move.w CHAR_WIDTH_OFFSET(a0), d0
+00001582                           807      * divide by 2
+00001582  E248                     808      lsr.w #1, d0
+00001584  3540 000C                809      move.w d0, CHAR_HALF_WIDTH_OFFSET(a2)
+00001588  5240                     810      add.w #1, d0
+0000158A  3540 000E                811      move.w d0, CHAR_CENTER_X_OFFSET(a2)
+0000158E  3028 0016                812      move.w CHAR_HEIGHT_OFFSET(a0), d0
+00001592                           813      * divide by 2
+00001592  E248                     814      lsr.w #1, d0
+00001594  3540 000A                815      move.w d0, CHAR_HALF_HEIGHT_OFFSET(a2)
+00001598  5240                     816      add.w #1, d0
+0000159A  3540 0010                817      move.w d0, CHAR_CENTER_Y_OFFSET(a2)
+0000159E  357C 0003 0008           818      move.w #CHAR_LIVES, CHAR_LIFE_OFFSET(a2)
+000015A4  204A                     819      move.l a2, a0
+000015A6  103C 0000                820      move.b #0, d0
+000015AA  6000 0006                821      bra .done
+000015AE                           822  .error
+000015AE  103C 0001                823      move.b #1, d0
+000015B2                           824  .done
+000015B2  4CDF 0400                825      movem.l (sp)+, .REGS
+000015B6  4E75                     826      rts
+000015B8                           827  
+000015B8                           828  
+000015B8                           829  
+000015B8                           830  
+000015B8                           831  char_resetChar:
+000015B8                           832      * reset values
+000015B8  377C 0140 0000           833      move.w #CHAR_START_X, CHAR_X_POS_OFFSET(a3)
+000015BE  377C 00F0 0002           834      move.w #CHAR_START_Y, CHAR_Y_POS_OFFSET(a3)
+000015C4  377C 0000 0006           835      move.w #0, CHAR_Y_VEL_OFFSET(a3)
+000015CA  377C 0F00 0004           836      move.w #$F00, CHAR_FP_Y_POS_OFFSET(a3)
+000015D0                           837      
+000015D0  206B 0012                838      move.l  CHAR_ART_ADDR_OFFSET(a3), a0
+000015D4  3028 0012                839      move.w CHAR_WIDTH_OFFSET(a0), d0
+000015D8                           840      * divide by 2 via left shift
+000015D8  E248                     841      lsr.w #1, d0
+000015DA  3740 000C                842      move.w d0, CHAR_HALF_WIDTH_OFFSET(a3)
+000015DE  5240                     843      add.w #1, d0
+000015E0  3740 000E                844      move.w d0, CHAR_CENTER_X_OFFSET(a3)
+000015E4  3028 0016                845      move.w CHAR_HEIGHT_OFFSET(a0), d0
+000015E8                           846      * divide by 2 via left shift
+000015E8  E248                     847      lsr.w #1, d0
+000015EA  3740 000A                848      move.w d0, CHAR_HALF_HEIGHT_OFFSET(a3)
+000015EE  5240                     849      add.w #1, d0
+000015F0  3740 0010                850      move.w d0, CHAR_CENTER_Y_OFFSET(a3)
+000015F4  377C 0003 0008           851      move.w #CHAR_LIVES, CHAR_LIFE_OFFSET(a3)
+000015FA                           852  
+000015FA  4E75                     853      rts
+000015FC                           854  
+000015FC                           855  
+000015FC                           856  char_erase:
+000015FC                           857  .REGS  REG D2-D4
+000015FC  48E7 3800                858      movem.l .REGS, -(sp)
+00001600                           859      * draw the background with a crop and position of the character's location
+00001600  206B 0012                860      move.l CHAR_ART_ADDR_OFFSET(a3), a0
+00001604  322B 0000                861      move.w CHAR_X_POS_OFFSET(a3), d1
+00001608  4841                     862      swap d1
+0000160A  322B 0002                863      move.w CHAR_Y_POS_OFFSET(a3), d1
+0000160E  2001                     864      move.l d1, d0
+00001610  224A                     865      move.l a2, a1
+00001612  3428 0012                866      move.w CHAR_WIDTH_OFFSET(a0), d2
+00001616  4842                     867      swap d2
+00001618  3428 0016                868      move.w CHAR_HEIGHT_OFFSET(a0), d2
+0000161C  6100 01BA                869      bsr bmp_Draw
+00001620  4CDF 001C                870      movem.l (sp)+, .REGS
+00001624  4E75                     871      rts
+00001626                           872  
+00001626                           873  
+00001626                           874  char_dmg:
+00001626                           875      * decrement the character's life value
+00001626  536B 0008                876      sub.w #1, CHAR_LIFE_OFFSET(a3)
+0000162A  6100 FB46                877      bsr sseg_drawLives
+0000162E                           878      
+0000162E  103C 0000                879      move.b #0, d0
+00001632                           880      * check for loss
+00001632  4A6B 0008                881      tst.w CHAR_LIFE_OFFSET(a3)
+00001636  6600 0006                882      bne .done
+0000163A                           883      * if the player is dead, raise loss flag
+0000163A  103C 0001                884      move.b #1, d0
+0000163E                           885      
+0000163E                           886  .done
+0000163E  4E75                     887      rts
+00001640                           888  
+00001640                           889  char_draw:
+00001640                           890  .REGS  REG D2-D4
+00001640  48E7 3800                891      movem.l .REGS, -(sp)
+00001644                           892      * draw the background with a crop and position of the character's location
+00001644  226B 0012                893      move.l CHAR_ART_ADDR_OFFSET(a3), a1
+00001648  322B 0000                894      move.w CHAR_X_POS_OFFSET(a3), d1
+0000164C  4841                     895      swap d1
+0000164E  322B 0002                896      move.w CHAR_Y_POS_OFFSET(a3), d1
+00001652  7000                     897      move.l #0, d0
+00001654  3429 0012                898      move.w WIDTH_OFFSET(a1), d2
+00001658  4842                     899      swap d2
+0000165A  3429 0016                900      move.w HEIGHT_OFFSET(a1), d2
+0000165E  6100 0178                901      bsr bmp_Draw
+00001662  4CDF 001C                902      movem.l (sp)+, .REGS
+00001666  4E75                     903      rts
+00001668                           904  
+00001668                           905  char_Move:
+00001668                           906  .REGS  REG D2-D4
+00001668  48E7 3800                907      movem.l .REGS, -(sp)
+0000166C                           908      * check what movement keys are pressed
+0000166C  223C 00574144            909      move.l #(CHAR_W_KEY<<16 + CHAR_A_KEY<<8 + CHAR_D_KEY), d1
+00001672  103C 0013                910      move.b #CHAR_GET_USER_INPUT, d0
+00001676  4E4F                     911      trap #15
+00001678                           912      * compare result to immediates to determine inputs
+00001678  2401                     913      move.l d1, d2
+0000167A                           914      
+0000167A                           915      * get the character width
+0000167A  206B 0012                916      move.l CHAR_ART_ADDR_OFFSET(a3), a0
+0000167E  3028 0012                917      move.w CHAR_WIDTH_OFFSET(a0), d0
+00001682                           918      * determine the right border of movement
+00001682  363C 022B                919      move.w #RIGHT_WALL, d3
+00001686  9640                     920      sub.w d0, d3
+00001688  302B 0000                921      move.w CHAR_X_POS_OFFSET(a3), d0
+0000168C                           922      * left movement check
+0000168C  0282 0000FF00            923      andi.l #$0000FF00, d2
+00001692  6700 0016                924      beq .postLeft
+00001696                           925      * move character left
+00001696  5740                     926      sub.w #CHAR_MOVE_SPEED, d0
+00001698                           927      * make sure the character is in bounds of the room
+00001698  B07C 0069                928      cmp.w #LEFT_WALL, d0
+0000169C  6E00 0022                929      bgt .postMove
+000016A0  303C 0069                930      move.w #LEFT_WALL, d0
+000016A4  5240                     931      add.w #1, d0
+000016A6  6000 0018                932      bra .postMove
+000016AA                           933  .postLeft
+000016AA                           934      * right movement check
+000016AA  2401                     935      move.l d1, d2
+000016AC  0282 000000FF            936      andi.l #$000000FF, d2
+000016B2  6700 000C                937      beq .postMove
+000016B6                           938      * move character right
+000016B6  5640                     939      add.w #CHAR_MOVE_SPEED, d0
+000016B8                           940      * make sure the character is in bounds of the room
+000016B8  B043                     941      cmp.w d3, d0
+000016BA  6F00 0004                942      ble .postMove
+000016BE  3003                     943      move.w d3, d0
+000016C0                           944  .postMove
+000016C0  3740 0000                945      move.w d0, CHAR_X_POS_OFFSET(a3)
+000016C4                           946      * update center x position
+000016C4  D06B 000C                947      add.w CHAR_HALF_WIDTH_OFFSET(a3), d0
+000016C8  5240                     948      add.w #1, d0
+000016CA  3740 000E                949      move.w d0, CHAR_CENTER_X_OFFSET(a3)
+000016CE                           950      
+000016CE                           951      * check if the character is grounded
+000016CE                           952      * get the character height
+000016CE  3028 0016                953      move.w CHAR_HEIGHT_OFFSET(a0), d0
+000016D2                           954      * calculate the grounded y position
+000016D2  363C 0150                955      move.w #FLOOR, d3
+000016D6  9640                     956      sub.w d0, d3
+000016D8  B66B 0002                957      cmp.w CHAR_Y_POS_OFFSET(a3), d3
+000016DC  6600 0018                958      bne .gravity
+000016E0                           959      
+000016E0                           960      * check for a jump input
+000016E0  2401                     961      move.l d1, d2
+000016E2  0282 00FF0000            962      andi.l #$00FF0000, d2
+000016E8  6700 0010                963      beq .postJump
+000016EC                           964      * give the character vertical velocity
+000016EC  377C 0077 0006           965      move.w #CHAR_JUMP_SPEED, CHAR_Y_VEL_OFFSET(a3)
+000016F2  6000 0006                966      bra .postJump
+000016F6                           967      * accelerates the character downward if they are not grounded
+000016F6                           968  .gravity
+000016F6                           969      * subtract the gravity constant to the character velocity
+000016F6  556B 0006                970      sub.w #GRAVITY, CHAR_Y_VEL_OFFSET(a3)
+000016FA                           971  .postJump
+000016FA                           972      * update the character's position, adjusted for floating point math (12.4 format)
+000016FA  302B 0004                973      move.w CHAR_FP_Y_POS_OFFSET(a3), d0
+000016FE  906B 0006                974      sub.w CHAR_Y_VEL_OFFSET(a3), d0
+00001702                           975      * check for floor collision
+00001702  E94B                     976      lsl.w #4, d3
+00001704  B043                     977      cmp.w d3, d0
+00001706  6D00 000A                978      blt .aboveFloor
+0000170A  3003                     979      move.w d3, d0
+0000170C  377C 0000 0006           980      move.w #0, CHAR_Y_VEL_OFFSET(a3)
+00001712                           981  .aboveFloor
+00001712  3740 0004                982      move.w d0, CHAR_FP_Y_POS_OFFSET(a3)
+00001716                           983      * add 1 to the first fractional bit and bitshift to round
+00001716  5040                     984      add.w #8, d0
+00001718  E848                     985      lsr.w #4, d0
+0000171A  3740 0002                986      move.w d0, CHAR_Y_POS_OFFSET(a3)
+0000171E                           987      * update center y position
+0000171E  D06B 000A                988      add.w CHAR_HALF_HEIGHT_OFFSET(a3), d0
+00001722  5240                     989      add.w #1, d0
+00001724  3740 0010                990      move.w d0, CHAR_CENTER_Y_OFFSET(a3)
+00001728  4CDF 001C                991      movem.l (sp)+, .REGS
+0000172C  4E75                     992      rts
+0000172E                           993  
+0000172E                           994  
+0000172E                           995  
+0000172E                           996  
+0000172E                           997  
+0000172E                           998  
+0000172E                           999  
+0000172E                          1000  
+0000172E                          1001  
+0000172E                          1002  
+0000172E                          1003  
+0000172E                          1004  -------------------- end include --------------------
+0000172E                          1005      INCLUDE "bitmap32.x68"
+0000172E  =0012C0FF               1006  BMP_FILE_BUFFER                     EQU     $12C0FF
+0000172E  =00000050               1007  BMP_PEN_COLOR_TRAP_CODE             EQU     80
+0000172E  =00000052               1008  BMP_DRAW_PIXEL_TRAP_CODE            EQU     82
+0000172E  =00000400               1009  BMP_SIZE_LIMIT                      EQU     1024
+0000172E  =0000001C               1010  BMP_TYPE_OFFSET                     EQU     $1C
+0000172E  =0000000A               1011  BMP_DATA_OFFSET_OFFSET              EQU     $A
+0000172E  =00000012               1012  BMP_WIDTH_OFFSET                    EQU     $12
+0000172E  =00000016               1013  BMP_HEIGHT_OFFSET                   EQU     $16
+0000172E  =0000424D               1014  BMP_BMP_SIGNATURE                   EQU     $424D
+0000172E                          1015  
+0000172E                          1016      
+0000172E                          1017  
+0000172E                          1018  
+0000172E                          1019  bmp_Load:
+0000172E                          1020  .REGS  REG D2-D3/A2
+0000172E  48E7 3020               1021      movem.l .REGS, -(sp)
+00001732                          1022      * store the name of the file in a non-volatile register
+00001732  2449                    1023      move.l a1, a2
+00001734                          1024      * allocate memory in the heap for the file buffer
+00001734  223C 0012C0FF           1025      move.l #BMP_FILE_BUFFER, d1
+0000173A  6100 0222               1026      bsr mem_alloc
+0000173E  4A00                    1027      tst.b d0
+00001740  6600 0074               1028      bne .error
+00001744                          1029      * read the file data into the buffer
+00001744  224A                    1030      move.l a2, a1
+00001746  2448                    1031      move.l a0, a2
+00001748  223C 0012C0FF           1032      move.l #BMP_FILE_BUFFER, d1
+0000174E  6100 0128               1033      bsr file_Read
+00001752  4A00                    1034      tst.b d0
+00001754  6600 0060               1035      bne .error
+00001758  2401                    1036      move.l d1, d2
+0000175A                          1037      * Check the data to ensure it is a bitmap
+0000175A  0C52 424D               1038      cmp.w #BMP_BMP_SIGNATURE, (a2)
+0000175E  6600 0050               1039      bne .free
+00001762                          1040      * Check to make sure it meets the size restrictions
+00001762  3629 0012               1041      move.w BMP_WIDTH_OFFSET(a1), d3
+00001766  E15B                    1042      rol.w #8, d3
+00001768  B67C 0400               1043      cmp.w #BMP_SIZE_LIMIT, d3
+0000176C  6E00 0042               1044      bgt .free
+00001770  3829 0016               1045      move.w BMP_HEIGHT_OFFSET(a1), d4
+00001774  E15C                    1046      rol.w #8, d4
+00001776  B87C 0400               1047      cmp.w #BMP_SIZE_LIMIT, d4
+0000177A  6E00 0034               1048      bgt .free
+0000177E  103C 0000               1049      move.b #0, d0
+00001782                          1050      * reorder the height and width
+00001782  3343 0012               1051      move.w d3, BMP_WIDTH_OFFSET(a1)
+00001786  3344 0016               1052      move.w d4, BMP_HEIGHT_OFFSET(a1)
+0000178A                          1053      * if it is a 32 bit bitmap, reorder the bits
+0000178A  1229 001C               1054      move.b BMP_TYPE_OFFSET(a1), d1
+0000178E                          1055      
+0000178E                          1056      * find end address of data
+0000178E  2449                    1057      move.l a1, a2
+00001790  D5C2                    1058      add.l d2, a2
+00001792                          1059      * move address to start of data
+00001792  2029 000A               1060      move.l BMP_DATA_OFFSET_OFFSET(a1), d0
+00001796  E198                    1061      rol.l #8, d0
+00001798  D3C0                    1062      add.l d0, a1
+0000179A                          1063      
+0000179A                          1064  .reorderLoop
+0000179A                          1065      
+0000179A  2211                    1066      move.l (a1), d1
+0000179C  C27C FF00               1067      and #$FF00, d1
+000017A0  E099                    1068      ror.l #8, d1
+000017A2  22C1                    1069      move.l d1, (a1)+
+000017A4                          1070      * check for end of loop
+000017A4  B3CA                    1071      cmp.l a2, a1
+000017A6  6DF2                    1072      blt .reorderLoop
+000017A8                          1073      * check if all values have been rewritten
+000017A8                          1074      
+000017A8  103C 0000               1075      move.b #0, d0
+000017AC  6000 000C               1076      bra .done
+000017B0                          1077  .free
+000017B0                          1078      * Free the allocated memory
+000017B0  224A                    1079      move.l a2, a1
+000017B2  6100 0284               1080      bsr mem_Free
+000017B6                          1081  .error
+000017B6  103C 0001               1082      move.b #1, d0
+000017BA                          1083  .done
+000017BA  4CDF 040C               1084      movem.l (sp)+, .REGS
+000017BE  4E75                    1085      rts
+000017C0                          1086  
+000017C0                          1087  
+000017C0                          1088  bmp_Unload:
+000017C0                          1089      * free the memory and verify success
+000017C0  6100 0276               1090      bsr mem_free
+000017C4  4A00                    1091      tst.b d0
+000017C6  6600 000A               1092      bne .error
+000017CA  103C 0000               1093      move.b #0, d0
+000017CE  6000 0006               1094      bra .done
+000017D2                          1095  .error
+000017D2  103C 0001               1096      move.b #1, d0
+000017D6                          1097  .done
+000017D6  4E75                    1098      rts
+000017D8                          1099  
+000017D8                          1100  bmp_Draw:
+000017D8                          1101  .REGS   REG     D2-D7/A2-A6
+000017D8                          1102      * store registers
+000017D8  48E7 3F3E               1103      movem.l .REGS, -(sp)
+000017DC                          1104      * store target point coordinates
+000017DC  3641                    1105      move.w d1, a3
+000017DE  4841                    1106      swap d1
+000017E0  3441                    1107      move.w d1, a2
+000017E2                          1108      * store crop target point
+000017E2  3840                    1109      move.w d0, a4
+000017E4  4840                    1110      swap d0
+000017E6  3040                    1111      move.w d0, a0
+000017E8                          1112      * store dimensions of image to print
+000017E8  3C42                    1113      move.w d2, a6
+000017EA  4842                    1114      swap d2
+000017EC  3A42                    1115      move.w d2, a5
+000017EE                          1116      * store the width and height of the image
+000017EE  7600                    1117      move.l #0, d3
+000017F0  7800                    1118      move.l #0, d4
+000017F2  3629 0012               1119      move.w BMP_WIDTH_OFFSET(a1), d3
+000017F6  3829 0016               1120      move.w BMP_HEIGHT_OFFSET(a1), d4
+000017FA                          1121      
+000017FA                          1122      * 32 bit bitmap drawing
+000017FA                          1123      * set memory offset variable
+000017FA  7C00                    1124      move.l #0, d6
+000017FC  3C04                    1125      move.w d4, d6
+000017FE  9C4C                    1126      sub.w a4, d6
+00001800  9C4E                    1127      sub.w a6, d6
+00001802  CCC3                    1128      mulu d3, d6
+00001804  DC48                    1129      add.w a0, d6
+00001806  E58E                    1130      lsl.l #2, d6
+00001808  2A29 000A               1131      move.l BMP_DATA_OFFSET_OFFSET(a1), d5
+0000180C  E19D                    1132      rol.l #8, d5
+0000180E  DC85                    1133      add.l d5, d6
+00001810  D3C6                    1134      add.l d6, a1
+00001812                          1135      * set starting x and y positions
+00001812  340E                    1136      move.w a6, d2
+00001814  5342                    1137      sub.w #1, d2
+00001816  D44B                    1138      add.w a3, d2
+00001818  3E0A                    1139      move.w a2, d7
+0000181A                          1140      * determine new line address offset
+0000181A  964D                    1141      sub.w a5, d3
+0000181C  E58B                    1142      lsl.l #2, d3
+0000181E                          1143      
+0000181E                          1144      * set ending x and y borders
+0000181E  DAC7                    1145      add.w d7, a5
+00001820  380B                    1146      move.w a3, d4
+00001822                          1147  
+00001822                          1148      * iterate over pixels and draw them
+00001822                          1149  .drawLoop32
+00001822  2219                    1150      move.l (a1)+, d1
+00001824                          1151      * increment address offset
+00001824                          1152      * next iteration if pen is out of bounds
+00001824  7050                    1153      move.l #BMP_PEN_COLOR_TRAP_CODE, d0
+00001826  4E4F                    1154      trap #15
+00001828  7052                    1155      move.l #BMP_DRAW_PIXEL_TRAP_CODE, d0
+0000182A                          1156      * transfer x position into d1
+0000182A  3207                    1157      move.w d7, d1
+0000182C  4E4F                    1158      trap #15
+0000182E                          1159      * increment (and check) width
+0000182E  5247                    1160      add.w #1, d7
+00001830  BE4D                    1161      cmp.w a5, d7
+00001832  6DEE                    1162      blt .drawLoop32
+00001834                          1163      * reset x position
+00001834  3E0A                    1164      move.w a2, d7
+00001836                          1165      * increment address offset appropriately
+00001836  D3C3                    1166      add.l d3, a1
+00001838                          1167      * decrement (and check) height
+00001838  5342                    1168      sub.w #1, d2
+0000183A  B444                    1169      cmp.w d4, d2
+0000183C  6CE4                    1170      bge .drawLoop32
+0000183E                          1171  .done
+0000183E  4CDF 7CFC               1172      movem.l (sp)+, .REGS
+00001842  4E75                    1173      rts
+00001844                          1174  
+00001844                          1175          ds.w 0
+00001844                          1176  
+00001844                          1177  
+00001844                          1178  
+00001844                          1179  
+00001844                          1180  
+00001844                          1181  
+00001844                          1182  
+00001844                          1183  
+00001844                          1184  
+00001844                          1185  
+00001844                          1186  
+00001844                          1187  
+00001844                          1188  
+00001844                          1189  
+00001844                          1190  -------------------- end include --------------------
+00001844                          1191      INCLUDE "file.x68"
+00001844                          1192  
+00001844  =00000033               1193  FILE_TASK_FOPEN      EQU     51
+00001844  =00000034               1194  FILE_TASK_FCREATE    EQU     52
+00001844  =00000035               1195  FILE_TASK_FREAD      EQU     53
+00001844  =00000036               1196  FILE_TASK_FWRITE     EQU     54
+00001844  =00000038               1197  FILE_TASK_FCLOSE     EQU     56
+00001844                          1198  
+00001844                          1199  file_Write:
+00001844                          1200  .REGS   REG     D2
+00001844                          1201          * save d2
+00001844  48E7 2000               1202          movem.l .REGS, -(sp)
+00001848                          1203          * store value of d1 in d2
+00001848  2401                    1204          move.l  d1, d2
+0000184A                          1205          * open the file
+0000184A  103C 0034               1206          move.b  #FILE_TASK_FCREATE, d0
+0000184E  4E4F                    1207          trap    #15
+00001850  4A40                    1208          tst.w   d0
+00001852  6600 001A               1209          bne     .error
+00001856                          1210          
+00001856                          1211          * write the words
+00001856  103C 0036               1212          move.b  #FILE_TASK_FWRITE, d0
+0000185A  224A                    1213          move.l     a2, a1
+0000185C                          1214  
+0000185C  4E4F                    1215          trap    #15
+0000185E  4A40                    1216          tst.w   d0
+00001860  6600 000C               1217          bne     .error
+00001864                          1218          
+00001864                          1219          * close the file
+00001864  7038                    1220          move.l  #FILE_TASK_FCLOSE, d0
+00001866  4E4F                    1221          trap    #15
+00001868  4A40                    1222          tst.w   d0
+0000186A  6700 0006               1223          beq     .done
+0000186E                          1224  
+0000186E                          1225  .error
+0000186E  103C 0001               1226          move.b #1, d0
+00001872                          1227  .done
+00001872                          1228          * restore d2
+00001872  4CDF 0004               1229          movem.l (sp)+, .REGS
+00001876  4E75                    1230          rts
+00001878                          1231  
+00001878                          1232  file_Read:
+00001878                          1233  .REGS   REG     D2
+00001878                          1234          * save d2
+00001878  48E7 2000               1235          movem.l .REGS, -(sp)
+0000187C                          1236          * store value of d1 in d2
+0000187C  2401                    1237          move.l  d1, d2
+0000187E                          1238          * open the file
+0000187E  103C 0033               1239          move.b  #FILE_TASK_FOPEN, d0
+00001882  4E4F                    1240          trap    #15
+00001884  4A40                    1241          tst.w   d0
+00001886  6600 001E               1242          bne     .error
+0000188A                          1243          
+0000188A                          1244          * read the words
+0000188A  103C 0035               1245          move.b  #FILE_TASK_FREAD, d0
+0000188E  224A                    1246          move.l     a2, a1
+00001890                          1247  
+00001890  4E4F                    1248          trap    #15
+00001892  C07C 00FE               1249          and.w #$FE, d0
+00001896  4A40                    1250          tst.w   d0
+00001898  6600 000C               1251          bne     .error
+0000189C                          1252          
+0000189C                          1253          * close the file
+0000189C  7038                    1254          move.l  #FILE_TASK_FCLOSE, d0
+0000189E  4E4F                    1255          trap    #15
+000018A0  4A40                    1256          tst.w   d0
+000018A2                          1257          
+000018A2  6700 0006               1258          beq     .done
+000018A6                          1259  
+000018A6                          1260  
+000018A6                          1261  .error
+000018A6  103C 0001               1262          move.b #1, d0
+000018AA                          1263  .done
+000018AA                          1264          * save the number of bytes read in d1
+000018AA  2202                    1265          move.l d2, d1
+000018AC                          1266          * restore d2
+000018AC  4CDF 0004               1267          movem.l (sp)+, .REGS
+000018B0  4E75                    1268          rts
+000018B2                          1269      
+000018B2                          1270  
+000018B2                          1271  
+000018B2                          1272  
+000018B2                          1273  
+000018B2                          1274  
+000018B2                          1275  
+000018B2                          1276  
+000018B2                          1277  
+000018B2                          1278  
+000018B2                          1279  
+000018B2                          1280  
+000018B2                          1281  
+000018B2                          1282  -------------------- end include --------------------
+000018B2                          1283      INCLUDE "memory.x68"
+000018B2                          1284  
+000018B2  =00000000               1285  MEM_AUDIT_OFFS_FREE_CNT     EQU 0
+000018B2  =00000004               1286  MEM_AUDIT_OFFS_USED_CNT     EQU 4
+000018B2  =00000008               1287  MEM_AUDIT_OFFS_FREE_MEM     EQU 8
+000018B2  =0000000C               1288  MEM_AUDIT_OFFS_USED_MEM     EQU 12
+000018B2  =00000010               1289  MEM_AUDIT_RETURN_SIZE       EQU 16
+000018B2                          1290  
+000018B2  =00000000               1291  MEM_SIZE        EQU 0
+000018B2  =00000004               1292  MEM_NEXT_ADDR   EQU 4
+000018B2  =00000008               1293  MEM_USED        EQU 8
+000018B2  =0000000A               1294  MEM_HEADER_SIZE EQU 10 * !!! update this value based on your header layout
+000018B2                          1295  
+000018B2                          1296  mem_InitHeap:
+000018B2                          1297      * check if the heap size is sufficient
+000018B2                          1298      * 11 for header and 1 byte
+000018B2  B2BC 0000000B           1299      cmp.l #11, d1
+000018B8  6D00 0032               1300      blt .error
+000018BC                          1301      
+000018BC  2001                    1302      move.l d1, d0
+000018BE                          1303      * calculate and set next address (end of heap)
+000018BE  2049                    1304      move.l a1, a0
+000018C0  D1C0                    1305      add.l d0, a0
+000018C2  2348 0004               1306      move.l a0, MEM_NEXT_ADDR(a1)
+000018C6  5388                    1307      sub.l #1, a0
+000018C8  23C8 00001A6A           1308      move.l a0, MEM_HEAP_END
+000018CE                          1309      * set size value properly for header and store it
+000018CE                          1310      
+000018CE  0480 0000000A           1311      sub.l #MEM_HEADER_SIZE, d0
+000018D4  2340 0000               1312      move.l d0, MEM_SIZE(a1)
+000018D8                          1313      
+000018D8                          1314      * set free flag
+000018D8  337C 0000 0008          1315      move.w #0, MEM_USED(a1)
+000018DE                          1316      
+000018DE                          1317      * set success flag
+000018DE  103C 0000               1318      move.b #0, d0
+000018E2                          1319      
+000018E2                          1320      * Store memory data
+000018E2  23C9 00001A66           1321      move.l a1, MEM_HEAP_START
+000018E8                          1322      
+000018E8  6000 0006               1323      bra .done
+000018EC                          1324      
+000018EC                          1325      * error if given buffer is too small
+000018EC                          1326  .error
+000018EC  103C 0001               1327      move.b #1, d0
+000018F0                          1328  .done    
+000018F0  4E75                    1329      rts
+000018F2                          1330  
+000018F2                          1331  mem_Audit:
+000018F2                          1332      * verify the heap has been allocated
+000018F2  2039 00001A66           1333      move.l MEM_HEAP_START, d0
+000018F8  2239 00001A6A           1334      move.l MEM_HEAP_END, d1
+000018FE  B081                    1335      cmp.l d1, d0
+00001900  6700 0056               1336      beq .error
+00001904                          1337      * prepare initial values
+00001904  2079 00001A66           1338      move.l MEM_HEAP_START, a0
+0000190A  2F7C 00000000 0004      1339      move.l #0, 4(sp)
+00001912  2F7C 00000000 0008      1340      move.l #0, 8(sp)
+0000191A  7000                    1341      move.l #0, d0
+0000191C  7200                    1342      move.l #0, d1
+0000191E                          1343      * iterate through blocks
+0000191E                          1344  .checkBlock
+0000191E                          1345      * check memory is still valid
+0000191E  B1F9 00001A6A           1346      cmp.l MEM_HEAP_END, a0
+00001924  6E00 0024               1347      bgt .done
+00001928                          1348      * check if block is free or used
+00001928  4A68 0008               1349      tst.w MEM_USED(a0)
+0000192C  6700 000E               1350      beq .free
+00001930                          1351      
+00001930                          1352      * used block processing
+00001930                          1353      * increment used block count
+00001930  52AF 0008               1354      add.l #1, 8(sp)
+00001934                          1355      
+00001934                          1356      * add the size of the block to the used mem total
+00001934  D2A8 0000               1357      add.l MEM_SIZE(a0), d1
+00001938  6000 000A               1358      bra .nextBlock
+0000193C                          1359      
+0000193C                          1360      * free block processing
+0000193C                          1361  .free
+0000193C                          1362      * increment free block count
+0000193C  52AF 0004               1363      add.l #1, 4(sp)
+00001940                          1364      
+00001940                          1365      * add the size of the block to the free mem total
+00001940  D0A8 0000               1366      add.l MEM_SIZE(a0), d0
+00001944                          1367      
+00001944                          1368      *move a0 to next block
+00001944                          1369  .nextBlock
+00001944  2068 0004               1370      move.l MEM_NEXT_ADDR(a0), a0
+00001948  60D4                    1371      bra .checkBlock
+0000194A                          1372  .done
+0000194A                          1373      * push values to the stack
+0000194A  2F40 000C               1374      move.l d0, 12(sp)
+0000194E  2F41 0010               1375      move.l d1, 16(sp)
+00001952  103C 0000               1376      move.b #0, d0
+00001956  4E75                    1377      rts
+00001958                          1378      
+00001958                          1379  .error
+00001958                          1380      * set error flag and return
+00001958  103C 0001               1381      move.b #1, d0
+0000195C  4E75                    1382      rts
+0000195E                          1383            
+0000195E                          1384  mem_Alloc:
+0000195E                          1385  .REGS  REG d2/a2
+0000195E  48E7 2020               1386      movem.l .REGS, -(sp)
+00001962                          1387      * verify the heap has been allocated
+00001962  2039 00001A66           1388      move.l MEM_HEAP_START, d0
+00001968  2439 00001A6A           1389      move.l MEM_HEAP_END, d2
+0000196E  B082                    1390      cmp.l d2, d0
+00001970  6700 00BC               1391      beq .error
+00001974                          1392      * iterate through the heap until a large enough free block is found
+00001974  2079 00001A66           1393      move.l MEM_HEAP_START, a0
+0000197A                          1394  .blockSearch
+0000197A                          1395      * check if block is used
+0000197A  3028 0008               1396      move.w MEM_USED(a0), d0
+0000197E  4A40                    1397      tst.w d0
+00001980  6600 000E               1398      bne .notValid
+00001984                          1399      * if free, check if block is large enough to store data
+00001984  B2A8 0000               1400      cmp.l MEM_SIZE(a0), d1
+00001988  6E00 0006               1401      bgt .notValid
+0000198C  6000 0012               1402      bra .alloc
+00001990                          1403      
+00001990                          1404  .notValid
+00001990                          1405      * increase a0 to next header
+00001990  2068 0004               1406      move.l MEM_NEXT_ADDR(a0), a0
+00001994                          1407      * ensure a0 is still in valid memory
+00001994  B1F9 00001A6A           1408      cmp.l MEM_HEAP_END, a0
+0000199A  6E00 0092               1409      bgt .error
+0000199E  60DA                    1410      bra .blockSearch
+000019A0                          1411      
+000019A0                          1412  .alloc
+000019A0                          1413      * check if the size is odd
+000019A0  2401                    1414      move.l d1, d2
+000019A2  C4BC 00000001           1415      and.l #1, d2
+000019A8  4A82                    1416      tst.l d2
+000019AA  6700 0004               1417      beq .even
+000019AE                          1418      * if d1 is odd, add 1 to d1
+000019AE  5281                    1419      add.l #1, d1
+000019B0                          1420  .even
+000019B0                          1421      * check if there is enough space for a header and data after this block
+000019B0  2248                    1422      move.l a0, a1
+000019B2  D3C1                    1423      add.l d1, a1
+000019B4  2428 0000               1424      move.l MEM_SIZE(a0), d2
+000019B8  9481                    1425      sub.l d1, d2
+000019BA                          1426      * Check if there is enough space for at least 1 header and 1 word/2 bytes
+000019BA  B4BC 0000000C           1427      cmp.l #12, d2
+000019C0  6D00 0046               1428      blt .noHead
+000019C4                          1429      
+000019C4                          1430      * allocate memory with a header at the end
+000019C4                          1431      
+000019C4                          1432      * update current header
+000019C4                          1433      * store previous size
+000019C4  2428 0000               1434      move.l MEM_SIZE(a0), d2
+000019C8                          1435      * update to new size
+000019C8  2141 0000               1436      move.l d1, MEM_SIZE(a0)
+000019CC                          1437      * store previous next address field
+000019CC  2468 0004               1438      move.l MEM_NEXT_ADDR(a0), a2
+000019D0                          1439      * find and store new 'tail' header address
+000019D0  2248                    1440      move.l a0, a1
+000019D2  D3C1                    1441      add.l d1, a1
+000019D4  D3FC 0000000A           1442      add.l #MEM_HEADER_SIZE, a1
+000019DA  2149 0004               1443      move.l a1, MEM_NEXT_ADDR(a0)
+000019DE                          1444      * set block to used
+000019DE  317C 0001 0008          1445      move.w #1, MEM_USED(a0)
+000019E4                          1446      * set next tail header's fields
+000019E4                          1447      * calculate new size for next header
+000019E4  0482 0000000A           1448      sub.l #MEM_HEADER_SIZE, d2
+000019EA  9481                    1449      sub.l d1, d2
+000019EC  2342 0000               1450      move.l d2, MEM_SIZE(a1)
+000019F0                          1451      * store next value for new header
+000019F0  234A 0004               1452      move.l a2, MEM_NEXT_ADDR(a1)
+000019F4                          1453      * set used flag to free
+000019F4  337C 0000 0008          1454      move.w #0, MEM_USED(a1)
+000019FA  103C 0000               1455      move.b #0, d0
+000019FE                          1456      * return address of allocation
+000019FE  D1FC 0000000A           1457      add.l #MEM_HEADER_SIZE, a0
+00001A04  6000 002C               1458      bra .done
+00001A08                          1459      * allocate a block with no header at the end
+00001A08                          1460      * also extends block to end of available heap memory
+00001A08                          1461  .noHead
+00001A08                          1462      * update size to extend to border
+00001A08  2428 0004               1463      move.l MEM_NEXT_ADDR(a0), d2
+00001A0C  9488                    1464      sub.l a0, d2
+00001A0E  0482 0000000A           1465      sub.l #MEM_HEADER_SIZE, d2
+00001A14  2202                    1466      move.l d2, d1
+00001A16                          1467      * update header
+00001A16                          1468      * update to new size
+00001A16  2141 0000               1469      move.l d1, MEM_SIZE(a0)
+00001A1A                          1470      * set block to used
+00001A1A  317C 0001 0008          1471      move.w #1, MEM_USED(a0)
+00001A20  103C 0000               1472      move.b #0, d0
+00001A24                          1473      * return address of allocation
+00001A24  D1FC 0000000A           1474      add.l #MEM_HEADER_SIZE, a0
+00001A2A  6000 0006               1475      bra .done
+00001A2E                          1476      
+00001A2E                          1477  .error
+00001A2E  103C 0001               1478      move.b #1, d0
+00001A32                          1479      
+00001A32                          1480  .done
+00001A32  4CDF 0404               1481      movem.l (sp)+, .REGS
+00001A36  4E75                    1482      rts
+00001A38                          1483      
+00001A38                          1484  mem_Free:
+00001A38                          1485      * verify the heap has been allocated
+00001A38  2039 00001A66           1486      move.l MEM_HEAP_START, d0
+00001A3E  2439 00001A6A           1487      move.l MEM_HEAP_END, d2
+00001A44  B082                    1488      cmp.l d2, d0
+00001A46  6700 0016               1489      beq .error
+00001A4A  93FC 0000000A           1490      sub.l #10, a1
+00001A50  337C 0000 0008          1491      move.w #0, MEM_USED(a1)
+00001A56  103C 0000               1492      move.b #0, d0
+00001A5A  6000 0006               1493      bra .done
+00001A5E                          1494      
+00001A5E                          1495  .error
+00001A5E  103C 0001               1496      move.b #1, d0
+00001A62                          1497  .done
+00001A62  4E75                    1498      rts
+00001A64                          1499      
+00001A64                          1500  mem_Shrink:
+00001A64  4E75                    1501      rts
+00001A66                          1502      
+00001A66                          1503      
+00001A66= 0DEADEAD                1504  MEM_HEAP_START dcb.l 1,$DEADEAD
+00001A6A= 0DEADEAD                1505  MEM_HEAP_END   dcb.l 1,$DEADEAD
+00001A6E                          1506  
+00001A6E                          1507  
+00001A6E                          1508  
+00001A6E                          1509  
+00001A6E                          1510  
+00001A6E                          1511  
+00001A6E                          1512  
+00001A6E                          1513  
+00001A6E                          1514  
+00001A6E                          1515  -------------------- end include --------------------
+00001A6E                          1516  
+00001A6E                          1517  * Register Usage:
+00001A6E                          1518  * d2 - max number of bullets
+00001A6E                          1519  * d3 - bullet generation counter
+00001A6E                          1520  * a2 - background image address
+00001A6E                          1521  * a3 - character object address
+00001A6E                          1522  * a4 - bullet list address
+00001A6E                          1523  START:
+00001A6E                          1524      * set up heap
+00001A6E  43F9 00001BC0           1525      lea HeapStart, a1
+00001A74  223C 00C00200           1526      move.l #HEAP_SIZE, d1
+00001A7A  6100 FE36               1527      bsr mem_InitHeap
+00001A7E  4A00                    1528      tst.b d0
+00001A80  6600 00EE               1529      bne .error
+00001A84                          1530      
+00001A84                          1531      * set the resolution of the output window
+00001A84  103C 0021               1532      move.b #OUTPUT_RESOLUTION_TRAP_CODE, d0
+00001A88  223C 00000280           1533      move.l #OUTPUT_WIDTH, d1
+00001A8E  4841                    1534      swap.w d1
+00001A90  323C 01E0               1535      move.w #OUTPUT_HEIGHT, d1
+00001A94  4E4F                    1536      trap #15
+00001A96                          1537      
+00001A96                          1538      * set buffer mode
+00001A96  7A00                    1539      move.l #0, d5
+00001A98  103C 005C               1540      move.b #DRAWING_MODE, d0
+00001A9C  123C 0011               1541      move.b #DOUBLE_BUFFERED_MODE, d1
+00001AA0  4E4F                    1542      trap #15
+00001AA2                          1543      
+00001AA2                          1544      * load and draw the background
+00001AA2  43F9 00001BB0           1545      lea backFile, a1
+00001AA8  6100 FC84               1546      bsr bmp_Load
+00001AAC  4A00                    1547      tst.b d0
+00001AAE  6600 00C0               1548      bne .error
+00001AB2                          1549      
+00001AB2                          1550      * store the address of the background
+00001AB2  2448                    1551      move.l a0, a2
+00001AB4                          1552      * draw the background
+00001AB4  7200                    1553      move.l #0, d1
+00001AB6  7000                    1554      move.l #0, d0
+00001AB8  224A                    1555      move.l a2, a1
+00001ABA  342A 0012               1556      move.w WIDTH_OFFSET(a2), d2
+00001ABE  4842                    1557      swap d2
+00001AC0  342A 0016               1558      move.w HEIGHT_OFFSET(a2), d2
+00001AC4  6100 FD12               1559      bsr bmp_Draw
+00001AC8  103C 005E               1560      move.b #REPAINT_SCREEN, d0
+00001ACC  4E4F                    1561      trap #15
+00001ACE                          1562      
+00001ACE                          1563      * create the bullet list
+00001ACE  700A                    1564      move.l #MAX_BULLET_NUMBER, d0
+00001AD0  49F9 00001BA5           1565      lea bullFILE, a4
+00001AD6  6100 F706               1566      bsr bull_createBulletList
+00001ADA  4A00                    1567      tst.b d0
+00001ADC  6600 0092               1568      bne .error
+00001AE0  2848                    1569      move.l a0, a4
+00001AE2                          1570      
+00001AE2                          1571      * create the character
+00001AE2  43F9 00001B97           1572      lea charFile, a1
+00001AE8  6100 FA58               1573      bsr char_createChar
+00001AEC  2648                    1574      move.l a0, a3
+00001AEE                          1575      
+00001AEE                          1576      * initialize numerical displays
+00001AEE  6100 F510               1577      bsr sseg_init
+00001AF2  740A                    1578      move.l #MAX_BULLET_NUMBER, d2
+00001AF4                          1579      
+00001AF4                          1580      * reset frame counter for bullet generation
+00001AF4  7600                    1581      move.l #0, d3
+00001AF6  6000 0010               1582      bra .gameLoop
+00001AFA                          1583  .resetGame
+00001AFA                          1584      * reset character position
+00001AFA  6100 FABC               1585      bsr char_resetChar
+00001AFE                          1586      
+00001AFE                          1587      * reset numerical displays
+00001AFE  6100 F500               1588      bsr sseg_init
+00001B02                          1589      
+00001B02                          1590      * clear all bullets
+00001B02  6100 F782               1591      bsr bull_destroy
+00001B06                          1592      
+00001B06                          1593      * reset frame counter for bullet generation
+00001B06  7600                    1594      move.l #0, d3
+00001B08                          1595  .gameloop
+00001B08                          1596      * reset the cycle counter
+00001B08  701E                    1597      move.l #CLEAR_CYCLES, d0
+00001B0A  4E4F                    1598      trap #15
+00001B0C                          1599      ***
+00001B0C                          1600      *** USER INPUT IS IN CHAR_MOVE SUBROUTINE
+00001B0C                          1601      ***
+00001B0C                          1602      *** CHAR_MOVE ALSO INCLUDES CHARACTER PHYSICS
+00001B0C                          1603      ***
+00001B0C                          1604      *** CHAR_MOVE ALSO INCLUDES COLLISION WITH THE FLOOR AND WALLS
+00001B0C                          1605      ***
+00001B0C  6100 FB5A               1606      bsr char_Move
+00001B10                          1607      ***
+00001B10                          1608      *** BITMAP REQUIREMENTS IN *_DRAW AND *_ERASE SUBROUTINES
+00001B10                          1609      ***
+00001B10  6100 FB2E               1610      bsr char_draw
+00001B14  6100 F82C               1611      bsr bull_drawBullets
+00001B18  103C 005E               1612      move.b #REPAINT_SCREEN, d0
+00001B1C  4E4F                    1613      trap #15
+00001B1E  6100 FADC               1614      bsr char_erase
+00001B22  6100 F716               1615      bsr bull_eraseBullets
+00001B26                          1616      ***
+00001B26                          1617      *** BULL_CHECKHIT CHECKS FOR COLLISION WITH THE CHARACTER
+00001B26                          1618      ***
+00001B26  6100 F798               1619      bsr bull_checkHit
+00001B2A                          1620      * check for loss
+00001B2A  4A00                    1621      tst.b d0
+00001B2C  6600 002A               1622      bne .loss
+00001B30                          1623      ***
+00001B30                          1624      *** BULL_MOVE CHECKS FOR COLLISION WITH THE WALLS
+00001B30                          1625      ***
+00001B30                          1626      ***
+00001B30                          1627      *** BULL_MOVE IMPLEMENTS PHYSICS AND FLOOR COLLISION FOR THE BOUNCING BULLETS
+00001B30                          1628      ***
+00001B30  6100 F860               1629      bsr bull_move
+00001B34                          1630      ***
+00001B34                          1631      *** SSEG_DRAWSCORE IMPLEMENTS A MULTI-DIGIT SEVEN SEGMENT DISPLAY (7SEG)
+00001B34                          1632      ***
+00001B34  6100 F64A               1633      bsr sseg_drawScore
+00001B38  B6BC 00000005           1634      cmp.l #FRAMES_BETWEEN_BULLETS, d3
+00001B3E  6D00 0008               1635      blt .noNewBullet
+00001B42  7600                    1636      move.l #0, d3
+00001B44                          1637      ***
+00001B44                          1638      *** BULL_CREATEBULLET IMPLEMENTS RANDOM GENERATION IN SEVERAL INSTANCES
+00001B44                          1639      ***
+00001B44                          1640      * generate new bullet
+00001B44  6100 F906               1641      bsr bull_createBullet
+00001B48                          1642      ***
+00001B48                          1643      *** BULL_CREATEBULLET IMPLEMENTS RANDOM GENERATION IN SEVERAL INSTANCES
+00001B48                          1644      ***
+00001B48                          1645  .noNewBullet
+00001B48  5283                    1646      add.l #1, d3
+00001B4A                          1647  * stall for target fps
+00001B4A                          1648  .fpsStallLoop
+00001B4A  701F                    1649      move.l #GET_CYCLES, d0
+00001B4C  4E4F                    1650      trap #15
+00001B4E  B2BC 000249F0           1651      cmp.l #CYCLES_PER_FRAME, d1
+00001B54  6DF4                    1652      blt .fpsStallLoop
+00001B56  60B0                    1653      bra .gameloop
+00001B58                          1654      
+00001B58                          1655  .loss
+00001B58                          1656      * update to show last life lost
+00001B58  103C 005E               1657      move.b #REPAINT_SCREEN, d0
+00001B5C  4E4F                    1658      trap #15
+00001B5E                          1659  .lossLoop
+00001B5E                          1660      * check if the R key was pressed
+00001B5E  7252                    1661      move.l #R_KEY, d1
+00001B60  103C 0013               1662      move.b #GET_USER_INPUT, d0
+00001B64  4E4F                    1663      trap #15
+00001B66                          1664      * if the R key was pressed, reset the game
+00001B66                          1665      * otherwise, continue to check for the input
+00001B66  0281 000000FF           1666      andi.l #$000000FF, d1
+00001B6C  67F0                    1667      beq .lossLoop
+00001B6E  608A                    1668      bra .resetGame
+00001B70                          1669      
+00001B70                          1670  .error
+00001B70  700D                    1671      moveq   #TASK_PRINT, d0
+00001B72  43F9 00001B7E           1672      lea     ErrorLabel, a1
+00001B78  4E4F                    1673      trap    #15
+00001B7A                          1674  .done
+00001B7A  FFFF FFFF               1675      SIMHALT             ; halt simulator
+00001B7E                          1676  
+00001B7E                          1677  * Put variables and constants here
+00001B7E= 41 6E 20 65 72 72 ...   1678  ErrorLabel      dc.b    'An error was encountered',0
+00001B97= 63 68 61 72 61 63 ...   1679  charFile        dc.b    'character.bmp',0
+00001BA5= 62 75 6C 6C 65 74 ...   1680  bullFile        dc.b    'bullet.bmp',0
+00001BB0= 62 61 63 6B 67 72 ...   1681  backFile        dc.b    'background.bmp',0
+00001BC0                          1682      ds.w 0
+00001BC0                          1683  HeapStart
+00001BC0                          1684      END    START        ; last line of source
+
+No errors detected
+No warnings generated
+
+
+SYMBOL TABLE INFORMATION
+Symbol-name         Value
+-------------------------
+BACKFILE            1BB0
+BMP_BMP_SIGNATURE   424D
+BMP_DATA_OFFSET_OFFSET  A
+BMP_DRAW            17D8
+BMP_DRAW:DONE       183E
+BMP_DRAW:DRAWLOOP32  1822
+BMP_DRAW:REGS       7CFC
+BMP_DRAW_PIXEL_TRAP_CODE  52
+BMP_FILE_BUFFER     12C0FF
+BMP_HEIGHT_OFFSET   16
+BMP_LOAD            172E
+BMP_LOAD:DONE       17BA
+BMP_LOAD:ERROR      17B6
+BMP_LOAD:FREE       17B0
+BMP_LOAD:REGS       40C
+BMP_LOAD:REORDERLOOP  179A
+BMP_PEN_COLOR_TRAP_CODE  50
+BMP_SIZE_LIMIT      400
+BMP_TYPE_OFFSET     1C
+BMP_UNLOAD          17C0
+BMP_UNLOAD:DONE     17D6
+BMP_UNLOAD:ERROR    17D2
+BMP_WIDTH_OFFSET    12
+BULLFILE            1BA5
+BULL_ACTIVE_OFFSET  0
+BULL_ART_ADDR       153E
+BULL_CENTER_X_OFFSET  10
+BULL_CENTER_Y_OFFSET  12
+BULL_CHECKHIT       12C0
+BULL_CHECKHIT:ACTIVEFOUND  12EC
+BULL_CHECKHIT:DONE  133C
+BULL_CHECKHIT:NONNEGX  1300
+BULL_CHECKHIT:NONNEGY  131E
+BULL_CHECKHIT:REGS  40C
+BULL_CHECKHIT:RETURNTOLOOP  12DA
+BULL_CHECKHIT:SEARCHLOOP  12D0
+BULL_CREATEBULLET   144C
+BULL_CREATEBULLET:ALLACTIVE  14F8
+BULL_CREATEBULLET:CENTER  14D8
+BULL_CREATEBULLET:DONE  14FC
+BULL_CREATEBULLET:INACTIVEFOUND  1474
+BULL_CREATEBULLET:LEFTWALL  14CC
+BULL_CREATEBULLET:REGS  4
+BULL_CREATEBULLET:SEARCHLOOP  145C
+BULL_CREATEBULLETLIST  11DE
+BULL_CREATEBULLETLIST:DONE  1234
+BULL_CREATEBULLETLIST:ERROR  1230
+BULL_CREATEBULLETLIST:INACTLOOP  11F8
+BULL_CREATEBULLETLIST:REGS  404
+BULL_DESTROY        1286
+BULL_DESTROY:ACTIVEFOUND  12B2
+BULL_DESTROY:DONE   12BA
+BULL_DESTROY:REGS   408
+BULL_DESTROY:RETURNTOLOOP  12A0
+BULL_DESTROY:SEARCHLOOP  1296
+BULL_DIMENSION      7
+BULL_DRAWBULLETS    1342
+BULL_DRAWBULLETS:ACTIVEFOUND  136A
+BULL_DRAWBULLETS:DONE  138C
+BULL_DRAWBULLETS:REGS  80C
+BULL_DRAWBULLETS:RETURNTOLOOP  135C
+BULL_DRAWBULLETS:SEARCHLOOP  1352
+BULL_ERASEBULLETS   123A
+BULL_ERASEBULLETS:ACTIVEFOUND  1262
+BULL_ERASEBULLETS:DONE  1280
+BULL_ERASEBULLETS:REGS  80C
+BULL_ERASEBULLETS:RETURNTOLOOP  1254
+BULL_ERASEBULLETS:SEARCHLOOP  124A
+BULL_FP_Y_POS_OFFSET  A
+BULL_GET_TIME       8
+BULL_HALF_DIMENSION  3
+BULL_HEIGHT_OFFSET  16
+BULL_MAX_SPEED      3
+BULL_MIN_SPEED      1
+BULL_MOVE           1392
+BULL_MOVE:ACTIVEFOUND  13BC
+BULL_MOVE:AIRBORNE  142E
+BULL_MOVE:BOUNCECHECK  1408
+BULL_MOVE:DONE      1446
+BULL_MOVE:MOVERIGHT  13E8
+BULL_MOVE:REGS      C1C
+BULL_MOVE:RETURNTOLOOP  13AE
+BULL_MOVE:SEARCHLOOP  13A4
+BULL_RANDNUM        1502
+BULL_RANDNUM:DONE   1534
+BULL_RANDNUM:NINC0  1518
+BULL_RANDNUM:NINC1  1520
+BULL_RANDNUM:REGS   1C
+BULL_RANDOMVAL      153A
+BULL_SIZE           14
+BULL_START_OFFSET   E
+BULL_TYPE_OFFSET    2
+BULL_WIDTH_OFFSET   12
+BULL_X_POS_OFFSET   4
+BULL_X_VEL_OFFSET   6
+BULL_Y_POS_OFFSET   8
+BULL_Y_VEL_OFFSET   C
+CEILING             4F
+CHARFILE            1B97
+CHAR_ART_ADDR_OFFSET  12
+CHAR_A_KEY          41
+CHAR_CENTER_X_OFFSET  E
+CHAR_CENTER_Y_OFFSET  10
+CHAR_CREATECHAR     1542
+CHAR_CREATECHAR:DONE  15B2
+CHAR_CREATECHAR:ERROR  15AE
+CHAR_CREATECHAR:REGS  400
+CHAR_DMG            1626
+CHAR_DMG:DONE       163E
+CHAR_DRAW           1640
+CHAR_DRAW:REGS      1C
+CHAR_D_KEY          44
+CHAR_ERASE          15FC
+CHAR_ERASE:REGS     1C
+CHAR_FP_Y_POS_OFFSET  4
+CHAR_GET_USER_INPUT  13
+CHAR_HALF_HEIGHT_OFFSET  A
+CHAR_HALF_WIDTH_OFFSET  C
+CHAR_HEIGHT_OFFSET  16
+CHAR_JUMP_SPEED     77
+CHAR_LIFE_OFFSET    8
+CHAR_LIVES          3
+CHAR_MOVE           1668
+CHAR_MOVE:ABOVEFLOOR  1712
+CHAR_MOVE:GRAVITY   16F6
+CHAR_MOVE:POSTJUMP  16FA
+CHAR_MOVE:POSTLEFT  16AA
+CHAR_MOVE:POSTMOVE  16C0
+CHAR_MOVE:REGS      1C
+CHAR_MOVE_SPEED     3
+CHAR_RESETCHAR      15B8
+CHAR_SIZE           16
+CHAR_START_X        140
+CHAR_START_Y        F0
+CHAR_WIDTH_OFFSET   12
+CHAR_W_KEY          57
+CHAR_X_POS_OFFSET   0
+CHAR_Y_POS_OFFSET   2
+CHAR_Y_VEL_OFFSET   6
+CLEAR_CYCLES        1E
+CYCLES_PER_FRAME    249F0
+DOUBLE_BUFFERED_MODE  11
+DRAWING_MODE        5C
+ERRORLABEL          1B7E
+FILE_READ           1878
+FILE_READ:DONE      18AA
+FILE_READ:ERROR     18A6
+FILE_READ:REGS      4
+FILE_TASK_FCLOSE    38
+FILE_TASK_FCREATE   34
+FILE_TASK_FOPEN     33
+FILE_TASK_FREAD     35
+FILE_TASK_FWRITE    36
+FILE_WRITE          1844
+FILE_WRITE:DONE     1872
+FILE_WRITE:ERROR    186E
+FILE_WRITE:REGS     4
+FLOOR               150
+FP_FLOOR            1500
+FRAMES_BETWEEN_BULLETS  5
+GET_CYCLES          1F
+GET_USER_INPUT      13
+GRAVITY             2
+HEAPSTART           1BC0
+HEAP_SIZE           C00200
+HEIGHT_OFFSET       16
+LEFT_WALL           69
+MAX_BULLET_NUMBER   A
+MEM_ALLOC           195E
+MEM_ALLOC:ALLOC     19A0
+MEM_ALLOC:BLOCKSEARCH  197A
+MEM_ALLOC:DONE      1A32
+MEM_ALLOC:ERROR     1A2E
+MEM_ALLOC:EVEN      19B0
+MEM_ALLOC:NOHEAD    1A08
+MEM_ALLOC:NOTVALID  1990
+MEM_ALLOC:REGS      404
+MEM_AUDIT           18F2
+MEM_AUDIT:CHECKBLOCK  191E
+MEM_AUDIT:DONE      194A
+MEM_AUDIT:ERROR     1958
+MEM_AUDIT:FREE      193C
+MEM_AUDIT:NEXTBLOCK  1944
+MEM_AUDIT_OFFS_FREE_CNT  0
+MEM_AUDIT_OFFS_FREE_MEM  8
+MEM_AUDIT_OFFS_USED_CNT  4
+MEM_AUDIT_OFFS_USED_MEM  C
+MEM_AUDIT_RETURN_SIZE  10
+MEM_FREE            1A38
+MEM_FREE:DONE       1A62
+MEM_FREE:ERROR      1A5E
+MEM_HEADER_SIZE     A
+MEM_HEAP_END        1A6A
+MEM_HEAP_START      1A66
+MEM_INITHEAP        18B2
+MEM_INITHEAP:DONE   18F0
+MEM_INITHEAP:ERROR  18EC
+MEM_NEXT_ADDR       4
+MEM_SHRINK          1A64
+MEM_SIZE            0
+MEM_USED            8
+OUTPUT_HEIGHT       1E0
+OUTPUT_RESOLUTION_TRAP_CODE  21
+OUTPUT_WIDTH        280
+REPAINT_SCREEN      5E
+RIGHT_WALL          22B
+R_KEY               52
+SSEG_ARRAY          11D4
+SSEG_A_SEG          1
+SSEG_B_SEG          2
+SSEG_C_SEG          4
+SSEG_DIGIT_DISTANCE  8
+SSEG_DRAWDIGIT      1016
+SSEG_DRAWDIGIT:ADRAW  103C
+SSEG_DRAWDIGIT:AWHITE  1036
+SSEG_DRAWDIGIT:BDRAW  1064
+SSEG_DRAWDIGIT:BWHITE  105E
+SSEG_DRAWDIGIT:CDRAW  1096
+SSEG_DRAWDIGIT:CWHITE  1090
+SSEG_DRAWDIGIT:DDRAW  10CA
+SSEG_DRAWDIGIT:DWHITE  10C4
+SSEG_DRAWDIGIT:EDRAW  10FA
+SSEG_DRAWDIGIT:EWHITE  10F4
+SSEG_DRAWDIGIT:FDRAW  1126
+SSEG_DRAWDIGIT:FWHITE  1120
+SSEG_DRAWDIGIT:GDRAW  1150
+SSEG_DRAWDIGIT:GWHITE  114A
+SSEG_DRAWDIGIT:REGS  4FC
+SSEG_DRAWLIVES      1172
+SSEG_DRAWSCORE      1180
+SSEG_DRAWSCORE:REGS  4
+SSEG_DRAW_LINE      54
+SSEG_D_SEG          8
+SSEG_EIGHT          11DC
+SSEG_E_SEG          10
+SSEG_FIVE           11D9
+SSEG_FOUR           11D8
+SSEG_F_SEG          20
+SSEG_G_SEG          40
+SSEG_INIT           1000
+SSEG_LINE_LENGTH    20
+SSEG_LIVES_LEFT_X   50
+SSEG_NINE           11DD
+SSEG_ONE            11D5
+SSEG_PEN_BLACK      0
+SSEG_PEN_COLOR      50
+SSEG_PEN_WHITE      FFFFFF
+SSEG_SCORE          11D0
+SSEG_SCORE_LEFT_X   1E0
+SSEG_SEV            11DB
+SSEG_SIX            11DA
+SSEG_THREE          11D7
+SSEG_TOP_Y          194
+SSEG_TWO            11D6
+SSEG_ZERO           11D4
+START               1A6E
+START:DONE          1B7A
+START:ERROR         1B70
+START:FPSSTALLLOOP  1B4A
+START:GAMELOOP      1B08
+START:LOSS          1B58
+START:LOSSLOOP      1B5E
+START:NONEWBULLET   1B48
+START:RESETGAME     1AFA
+TASK_PRINT          D
+WIDTH_OFFSET        12

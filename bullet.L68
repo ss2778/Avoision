@@ -1,0 +1,606 @@
+000019DC Starting Address
+Assembler used: EASy68K Editor/Assembler v5.16.01
+Created On: 10/15/2024 5:13:30 PM
+
+00000000                             1  *-----------------------------------------------------------
+00000000                             2  * Title      : Bullet
+00000000                             3  * Written by : Brandon Holtzman
+00000000                             4  * Date       : 10/13/2024
+00000000                             5  * Description: Bullet 'class' for assembly game
+00000000                             6  *-----------------------------------------------------------
+00000000  =00000014                  7  BULL_SIZE            EQU   20
+00000000  =00000000                  8  BULL_ACTIVE_OFFSET   EQU   0
+00000000                             9  * Bullet type 0 is a laser bullet
+00000000                            10  * bullet type 1 is a bouncing bullet
+00000000  =00000002                 11  BULL_TYPE_OFFSET     EQU   2
+00000000  =00000004                 12  BULL_X_POS_OFFSET    EQU   4
+00000000  =00000006                 13  BULL_X_VEL_OFFSET    EQU   6
+00000000  =00000008                 14  BULL_Y_POS_OFFSET    EQU   8
+00000000  =0000000A                 15  BULL_FP_Y_POS_OFFSET EQU   10
+00000000  =0000000C                 16  BULL_Y_VEL_OFFSET    EQU   12
+00000000  =0000000E                 17  BULL_START_OFFSET    EQU   14
+00000000  =00000010                 18  BULL_CENTER_X_OFFSET EQU   16
+00000000  =00000012                 19  BULL_CENTER_Y_OFFSET EQU   18
+00000000                            20  
+00000000  =00000012                 21  BULL_WIDTH_OFFSET    EQU  $12
+00000000  =00000016                 22  BULL_HEIGHT_OFFSET   EQU  $16
+00000000                            23  
+00000000  =00000007                 24  BULL_DIMENSION       EQU   7
+00000000  =00000003                 25  BULL_HALF_DIMENSION  EQU   3
+00000000  =00000003                 26  BULL_MAX_SPEED       EQU   3
+00000000  =00000001                 27  BULL_MIN_SPEED       EQU   1
+00000000                            28  
+00000000  =00000008                 29  BULL_GET_TIME        EQU   8
+00000000                            30  
+00000000                            31  
+00000000                            32  *---
+00000000                            33  * Creates a bullet list buffer in memory
+00000000                            34  * 
+00000000                            35  * d0 - max number of bullets
+00000000                            36  * a4 - address of bullet filename
+00000000                            37  * out a0 - start address of bullet list
+00000000                            38  * out d0.b - 0 = success, non-zero = failure
+00000000                            39  *---
+00000000                            40  bull_createBulletList:
+00000000                            41  .REGS  REG D2/A2
+00000000  48E7 2020                 42      movem.l .REGS, -(sp)
+00000004                            43      * find the number of bytes to allocate
+00000004  7214                      44      move.l #BULL_SIZE, d1
+00000006  C2C0                      45      mulu d0, d1
+00000008  2401                      46      move.l d1, d2
+0000000A                            47      * allocate the memory
+Line 48 ERROR: Undefined symbol
+0000000A  6100 BD0A                 48      bsr mem_Alloc
+0000000E  4A00                      49      tst.b d0
+00000010  6600 0040                 50      bne .error
+00000014                            51      
+00000014                            52      * set every bullet to inactive
+00000014  2248                      53      move.l a0, a1
+00000016  2448                      54      move.l a0, a2
+00000018  D488                      55      add.l a0, d2
+0000001A                            56  .inactLoop
+0000001A  337C 0000 0000            57      move.w #0, BULL_ACTIVE_OFFSET(a1)
+00000020  D3FC 00000014             58      add.l #BULL_SIZE, a1
+00000026                            59      * check if end of list has been reached
+00000026  B3C2                      60      cmp.l d2, a1
+00000028  6DF0                      61      blt .inactLoop
+0000002A                            62      
+0000002A                            63      * seed the random number generator
+0000002A                            64      * This code is shamelessly recycled from Jeremy's RandomNumbers.x68 file
+0000002A                            65  
+0000002A  103C 0008                 66      move.b #BULL_GET_TIME, d0
+0000002E  4E4F                      67      trap #15
+00000030  23C1 0000031E             68      move.l d1, BULL_RANDOMVAL
+00000036                            69      
+00000036                            70      * load the bullet bitmap and store the address in BULL_ART_ADDR label
+00000036  224C                      71      move.l a4, a1
+Line 72 ERROR: Undefined symbol
+00000038  6100 BCDC                 72      bsr bmp_Load
+0000003C  4A00                      73      tst.b d0
+0000003E  6600 0012                 74      bne .error
+00000042  23C8 00000322             75      move.l a0, BULL_ART_ADDR
+00000048                            76      * restore list address to output register
+00000048  204A                      77      move.l a2, a0
+0000004A                            78      
+0000004A  103C 0000                 79      move.b #0, d0
+0000004E  6000 0006                 80      bra .done
+00000052                            81  .error
+00000052  103C 0001                 82      move.b #1, d0
+00000056                            83  .done
+00000056  4CDF 0404                 84      movem.l (sp)+, .REGS
+0000005A  4E75                      85      rts
+0000005C                            86  
+0000005C                            87  *---
+0000005C                            88  * Erases all active bullets
+0000005C                            89  * 
+0000005C                            90  * d2 - max number of bullets
+0000005C                            91  * a4 - bullet list start address
+0000005C                            92  * a2 - address of background
+0000005C                            93  *
+0000005C                            94  *---
+0000005C                            95  bull_eraseBullets:
+0000005C                            96  .REGS  REG D2-D3/A3
+0000005C  48E7 3010                 97      movem.l .REGS, -(sp)
+00000060  7214                      98      move.l #BULL_SIZE, d1
+00000062  2002                      99      move.l d2, d0
+00000064  C2C0                     100      mulu d0, d1
+00000066  2601                     101      move.l d1, d3
+00000068                           102      
+00000068  264C                     103      move.l a4, a3
+0000006A  D68C                     104      add.l a4, d3
+0000006C                           105  .searchLoop
+0000006C  322B 0000                106      move.w BULL_ACTIVE_OFFSET(a3), d1
+00000070  4A41                     107      tst.w d1
+00000072  6600 0010                108      bne .activeFound
+00000076                           109  .returnToLoop
+00000076  D7FC 00000014            110      add.l #BULL_SIZE, a3
+0000007C                           111      * check if end of list has been reached
+0000007C  B7C3                     112      cmp.l d3, a3
+0000007E  6DEC                     113      blt .searchLoop
+00000080  6000 0020                114      bra .done
+00000084                           115  
+00000084                           116      * erase the active bullet
+00000084                           117  .activeFound
+00000084  322B 0004                118      move.w BULL_X_POS_OFFSET(a3), d1
+00000088  4841                     119      swap d1
+0000008A  322B 0008                120      move.w BULL_Y_POS_OFFSET(a3), d1
+0000008E  2001                     121      move.l d1, d0
+00000090  224A                     122      move.l a2, a1
+00000092  343C 0007                123      move.w #BULL_DIMENSION, d2
+00000096  4842                     124      swap d2
+00000098  343C 0007                125      move.w #BULL_DIMENSION, d2
+Line 126 ERROR: Undefined symbol
+0000009C  6100 BC78                126      bsr bmp_Draw
+000000A0  60D4                     127      bra .returnToLoop
+000000A2                           128      
+000000A2                           129  .done
+000000A2  4CDF 080C                130      movem.l (sp)+, .REGS
+000000A6  4E75                     131      rts
+000000A8                           132      
+000000A8                           133  
+000000A8                           134  
+000000A8                           135  
+000000A8                           136  *---
+000000A8                           137  * Check if active bullets have collided with the player
+000000A8                           138  * 
+000000A8                           139  * d2 - max number of bullets
+000000A8                           140  * a4 - bullet list start address
+000000A8                           141  * a3 - character object address
+000000A8                           142  *
+000000A8                           143  *---
+000000A8                           144  bull_checkHit:
+000000A8                           145  .REGS  REG D2-D3/A2
+000000A8  48E7 3020                146      movem.l .REGS, -(sp)
+000000AC  7214                     147      move.l #BULL_SIZE, d1
+000000AE  2002                     148      move.l d2, d0
+000000B0  C2C0                     149      mulu d0, d1
+000000B2  2601                     150      move.l d1, d3
+000000B4                           151      
+000000B4  244C                     152      move.l a4, a2
+000000B6  D68C                     153      add.l a4, d3
+000000B8                           154  .searchLoop
+000000B8  322A 0000                155      move.w BULL_ACTIVE_OFFSET(a2), d1
+000000BC  4A41                     156      tst.w d1
+000000BE  6600 0010                157      bne .activeFound
+000000C2                           158  .returnToLoop
+000000C2  D5FC 00000014            159      add.l #BULL_SIZE, a2
+000000C8                           160      * check if end of list has been reached
+000000C8  B5C3                     161      cmp.l d3, a2
+000000CA  6DEC                     162      blt .searchLoop
+000000CC  6000 004C                163      bra .done
+000000D0                           164  
+000000D0                           165      * check for collision with the character
+000000D0                           166  .activeFound
+000000D0  7400                     167      move.l #0, d2
+000000D2                           168      * check distance in the x direction
+000000D2  342A 0010                169      move.w BULL_CENTER_X_OFFSET(a2), d2
+Line 170 ERROR: Undefined symbol
+000000D6  946B BD16                170      sub.w CHAR_CENTER_X_OFFSET(a3), d2
+000000DA                           171      * ensure the value is non negative
+000000DA  B47C 0000                172      cmp.w #0, d2
+000000DE  6E00 0004                173      bgt .nonNegX
+000000E2  4442                     174      neg.w d2
+000000E4                           175  .nonNegX
+000000E4                           176      * check distance between the centers
+Line 177 ERROR: Undefined symbol
+000000E4  946B BD16                177      sub.w CHAR_HALF_WIDTH_OFFSET(a3), d2
+000000E8  5742                     178      sub.w #BULL_HALF_DIMENSION, d2
+000000EA                           179      * if it is non-negative, the boxes are not colliding
+000000EA  B47C 0000                180      cmp.w #0, d2
+000000EE  6CD2                     181      bge .returnToLoop
+000000F0                           182      
+000000F0                           183      * check distance in the y direction
+000000F0  342A 0012                184      move.w BULL_CENTER_Y_OFFSET(a2), d2
+Line 185 ERROR: Undefined symbol
+000000F4  946B BD16                185      sub.w CHAR_CENTER_Y_OFFSET(a3), d2
+000000F8                           186      * ensure the value is non negative
+000000F8  B47C 0000                187      cmp.w #0, d2
+000000FC  6E00 0004                188      bgt .nonNegY
+00000100  4442                     189      neg.w d2
+00000102                           190  .nonNegY
+Line 191 ERROR: Undefined symbol
+00000102  946B BD16                191      sub.w CHAR_HALF_HEIGHT_OFFSET(a3), d2
+00000106  5742                     192      sub.w #BULL_HALF_DIMENSION, d2
+00000108                           193      * if it is non-negative, the boxes are not colliding
+00000108  B47C 0000                194      cmp.w #0, d2
+0000010C  6CB4                     195      bge .returnToLoop
+0000010E                           196      
+0000010E                           197      * if no branch was taken, the current bullet and the player have collided
+Line 198 ERROR: Undefined symbol
+0000010E  6100 BC06                198      bsr char_dmg
+00000112                           199      **********
+00000112                           200      *** if the player loses, immediately leave the loop and raise loss flag
+00000112                           201      *** also add loss flag to subroutine description
+00000112                           202      * disable the current bullet
+00000112  357C 0000 0000           203      move.w #0, BULL_ACTIVE_OFFSET(a2)
+00000118  60A8                     204      bra .returnToLoop
+0000011A                           205  .done
+0000011A  4CDF 040C                206      movem.l (sp)+, .REGS
+0000011E  4E75                     207      rts    
+00000120                           208      
+00000120                           209  
+00000120                           210  *---
+00000120                           211  * Draws all active bullets
+00000120                           212  * 
+00000120                           213  * d2 - max number of bullets
+00000120                           214  * a4 - bullet list start address
+00000120                           215  *
+00000120                           216  *---
+00000120                           217  bull_drawBullets:
+00000120                           218  .REGS  REG D2-D3/A3
+00000120  48E7 3010                219      movem.l .REGS, -(sp)
+00000124  7214                     220      move.l #BULL_SIZE, d1
+00000126  2002                     221      move.l d2, d0
+00000128  C2C0                     222      mulu d0, d1
+0000012A  2601                     223      move.l d1, d3
+0000012C                           224      
+0000012C  264C                     225      move.l a4, a3
+0000012E  D68C                     226      add.l a4, d3
+00000130                           227  .searchLoop
+00000130  322B 0000                228      move.w BULL_ACTIVE_OFFSET(a3), d1
+00000134  4A41                     229      tst.w d1
+00000136  6600 0010                230      bne .activeFound
+0000013A                           231  .returnToLoop
+0000013A  D7FC 00000014            232      add.l #BULL_SIZE, a3
+00000140                           233      * check if end of list has been reached
+00000140  B7C3                     234      cmp.l d3, a3
+00000142  6DEC                     235      blt .searchLoop
+00000144  6000 0024                236      bra .done
+00000148                           237  
+00000148                           238      * draw the active bullet
+00000148                           239  .activeFound
+00000148  2279 00000322            240      move.l BULL_ART_ADDR, a1
+0000014E  322B 0004                241      move.w BULL_X_POS_OFFSET(a3), d1
+00000152  4841                     242      swap d1
+00000154  322B 0008                243      move.w BULL_Y_POS_OFFSET(a3), d1
+00000158  7000                     244      move.l #0, d0
+0000015A  343C 0007                245      move.w #BULL_DIMENSION, d2
+0000015E  4842                     246      swap d2
+00000160  343C 0007                247      move.w #BULL_DIMENSION, d2
+Line 248 ERROR: Undefined symbol
+00000164  6100 BBB0                248      bsr bmp_Draw
+00000168  60D0                     249      bra .returnToLoop
+0000016A                           250  .done
+0000016A  4CDF 080C                251      movem.l (sp)+, .REGS
+0000016E  4E75                     252      rts
+00000170                           253  
+00000170                           254  *---
+00000170                           255  * Move the bullets according to their type and direction
+00000170                           256  * Also checks for wall collisions, returning any points gained
+00000170                           257  * Bisables bullets that collide with the wall 
+00000170                           258  *
+00000170                           259  * d2 - max number of bullets
+00000170                           260  * a4 - bullet list start address
+00000170                           261  *
+00000170                           262  * out d0 - number of points scored
+00000170                           263  *---
+00000170                           264  bull_move:
+00000170                           265  .REGS  REG D2-D4/A2-A3
+00000170  48E7 3830                266      movem.l .REGS, -(sp)
+00000174  7214                     267      move.l #BULL_SIZE, d1
+00000176  2002                     268      move.l d2, d0
+00000178  C2C0                     269      mulu d0, d1
+0000017A  2601                     270      move.l d1, d3
+0000017C                           271      
+0000017C  7000                     272      move.l #0, d0
+0000017E                           273      
+0000017E  264C                     274      move.l a4, a3
+00000180  D68C                     275      add.l a4, d3
+00000182                           276  .searchLoop
+00000182  322B 0000                277      move.w BULL_ACTIVE_OFFSET(a3), d1
+00000186  4A41                     278      tst.w d1
+00000188  6600 0010                279      bne .activeFound
+0000018C                           280  .returnToLoop
+0000018C  D7FC 00000014            281      add.l #BULL_SIZE, a3
+00000192                           282      * check if end of list has been reached
+00000192  B7C3                     283      cmp.l d3, a3
+00000194  6DEC                     284      blt .searchLoop
+00000196  6000 008E                285      bra .done
+0000019A                           286      
+0000019A                           287      * move the active bullet
+0000019A                           288  .activeFound
+0000019A  7400                     289      move.l #0, d2
+0000019C                           290      * check the direction the bullet is moving
+0000019C  342B 000E                291      move.w BULL_START_OFFSET(a3), d2
+000001A0  4A42                     292      tst.w d2
+000001A2  6600 0022                293      bne .moveRight
+000001A6                           294      * adjust its position accordingly
+000001A6                           295      
+000001A6                           296      * move the bullet to the left
+000001A6  342B 0006                297      move.w BULL_X_VEL_OFFSET(a3), d2
+000001AA  956B 0004                298      sub.w d2, BULL_X_POS_OFFSET(a3)
+000001AE                           299      * move the bullet center x
+000001AE  956B 0010                300      sub.w d2, BULL_CENTER_X_OFFSET(a3)
+000001B2                           301      
+000001B2                           302      * check for left wall collision
+Line 303 ERROR: Undefined symbol
+000001B2  0C6B BD16 0004           303      cmp.w #LEFT_WALL, BULL_X_POS_OFFSET(a3)
+000001B8  6E00 002C                304      bgt .bounceCheck
+000001BC                           305      * if the bullet collides, disable it and give the user a point
+000001BC  377C 0000 0000           306      move.w #0, BULL_ACTIVE_OFFSET(a3)
+000001C2  5280                     307      add.l #1, d0
+000001C4  60C6                     308      bra .returnToLoop
+000001C6                           309      * move the bullet to the right
+000001C6                           310  .moveRight
+000001C6  342B 0006                311      move.w BULL_X_VEL_OFFSET(a3), d2
+000001CA  D56B 0004                312      add.w d2, BULL_X_POS_OFFSET(a3)
+000001CE                           313      
+000001CE                           314      * move the bullet center x
+000001CE  D56B 0010                315      add.w d2, BULL_CENTER_X_OFFSET(a3)
+000001D2                           316      
+000001D2                           317      * check for right wall collision
+Line 318 ERROR: Comma expected
+000001D2                           318      cmp.w #RIGHT_WALL-BULL_DIMENSION, BULL_X_POS_OFFSET(a3)
+000001D2  6D00 0012                319      blt .bounceCheck
+000001D6                           320      * if the bullet collides, disable it and give the user a point
+000001D6  377C 0000 0000           321      move.w #0, BULL_ACTIVE_OFFSET(a3)
+000001DC  5280                     322      add.l #1, d0
+000001DE  60AC                     323      bra .returnToLoop
+000001E0                           324      * check if the bullet bounces or not
+Line 325 ERROR: Symbol value differs between first and second pass
+000001E0                           325  .bounceCheck
+000001E0                           326      * if the bullet does not bounce, branch back to the loop
+000001E0  4A6B 0002                327      tst.w BULL_TYPE_OFFSET(a3)
+000001E4  67A6                     328      beq .returnToLoop
+000001E6                           329      
+000001E6                           330      * add gravity to the bullet's y velocity
+Line 331 ERROR: Undefined symbol
+000001E6  066B BD16 000C           331      add.w #GRAVITY, BULL_Y_VEL_OFFSET(a3)
+000001EC                           332      
+000001EC                           333      * derive ground y value in 12.4 fixed point
+000001EC  7800                     334      move.l #0, d4
+Line 335 ERROR: Comma expected
+000001EE                           335      move.w #FLOOR-BULL_DIMENSION, d4
+000001EE  E94C                     336      lsl.w #4, d4
+000001F0                           337      * check for ground collision
+000001F0  342B 000C                338      move.w BULL_Y_VEL_OFFSET(a3), d2
+000001F4  D46B 000A                339      add.w BULL_FP_Y_POS_OFFSET(a3), d2
+000001F8                           340      
+000001F8  B444                     341      cmp.w d4, d2
+000001FA  6D00 0012                342      blt .airborne
+000001FE                           343      * if on/below ground, move position to the ground
+000001FE                           344      * and negate velocity
+000001FE  3404                     345      move.w d4, d2
+00000200  446B 000C                346      neg.w BULL_Y_VEL_OFFSET(a3)
+00000204                           347      
+Line 348 ERROR: Symbol value differs between first and second pass
+00000204                           348  .airborne
+00000204                           349      * save the fixed point position
+00000204  3742 000A                350      move.w d2, BULL_FP_Y_POS_OFFSET(a3)
+00000208                           351      * round the fixed point (12.4) value
+00000208  5042                     352      add.w #8, d2
+0000020A  E84A                     353      lsr.w #4, d2
+0000020C  3742 0008                354      move.w d2, BULL_Y_POS_OFFSET(a3)
+00000210                           355      
+00000210                           356      * update center y position
+00000210  5642                     357      add.w #BULL_HALF_DIMENSION, d2
+00000212  5242                     358      add.w #1, d2
+00000214  3742 0012                359      move.w d2, BULL_CENTER_Y_OFFSET(a3)
+00000218                           360      
+00000218                           361      
+00000218  6000 FF72                362      bra .returnToLoop
+0000021C                           363  
+0000021C                           364  
+Line 365 ERROR: Symbol value differs between first and second pass
+0000021C                           365  .done
+0000021C  4CDF 0C1C                366      movem.l (sp)+, .REGS
+00000220  4E75                     367      rts
+00000222                           368  
+00000222                           369  *---
+00000222                           370  * Creates a bullet in the first available slot in the bullet list
+00000222                           371  * 
+00000222                           372  * d2 - max number of bullets
+00000222                           373  * a4 - bullet list start address
+00000222                           374  *
+00000222                           375  * out d0.b - 0 = success, non-zero = failure (list full)
+00000222                           376  *---
+Line 377 ERROR: Symbol value differs between first and second pass
+00000222                           377  bull_createBullet:
+00000222                           378  .REGS  REG D2
+00000222  48E7 2000                379      movem.l .REGS, -(sp)
+00000226                           380      * find an inactive bullet
+00000226  2002                     381      move.l d2, d0
+00000228  7214                     382      move.l #BULL_SIZE, d1
+0000022A  C2C0                     383      mulu d0, d1
+0000022C  2401                     384      move.l d1, d2
+0000022E                           385      
+0000022E  224C                     386      move.l a4, a1
+00000230  D48C                     387      add.l a4, d2
+Line 388 ERROR: Symbol value differs between first and second pass
+00000232                           388  .searchLoop
+00000232  3229 0000                389      move.w BULL_ACTIVE_OFFSET(a1), d1
+00000236  4A41                     390      tst.w d1
+00000238  6700 001A                391      beq .inactiveFound
+0000023C  D3FC 00000014            392      add.l #BULL_SIZE, a1
+00000242                           393      * check if end of list has been reached
+00000242  B3C2                     394      cmp.l d2, a1
+00000244  6DF6                     395      blt .searchLoop
+00000246  6000 0094                396      bra .allActive
+Line 397 ERROR: Symbol value differs between first and second pass
+0000024A                           397  .inactiveFound
+0000024A                           398      * set active
+0000024A  337C 0001 0000           399      move.w #1, BULL_ACTIVE_OFFSET(a1)
+00000250                           400      * generate bullet type
+00000250  7000                     401      move.l #0, d0
+00000252  7201                     402      move.l #1, d1
+00000254  6100 0090                403      bsr bull_randNum
+00000258  3340 0002                404      move.w d0, BULL_TYPE_OFFSET(a1)
+0000025C                           405      * generate bullet start height
+Line 406 ERROR: Undefined symbol
+0000025C  203C 004DBD16            406      move.l #CEILING, d0
+Line 407 ERROR: Comma expected
+00000262                           407      move.l #FLOOR-BULL_DIMENSION, d1
+00000262  6100 0082                408      bsr bull_randNum
+00000266  3340 0008                409      move.w d0, BULL_Y_POS_OFFSET(a1)
+0000026A  E948                     410      lsl.w #4, d0
+0000026C  3340 000A                411      move.w d0, BULL_FP_Y_POS_OFFSET(a1)
+00000270                           412      * assign y velocity of 0
+00000270  337C 0000 000C           413      move.w #0, BULL_Y_VEL_OFFSET(a1)
+00000276                           414      * generate bullet speed
+00000276  7001                     415      move.l #BULL_MIN_SPEED, d0
+00000278  7203                     416      move.l #BULL_MAX_SPEED, d1
+0000027A  6100 006A                417      bsr bull_randNum
+0000027E  3340 0006                418      move.w d0, BULL_X_VEL_OFFSET(a1)
+00000282                           419      * generate starting wall
+00000282  7000                     420      move.l #0, d0
+00000284  7201                     421      move.l #1, d1
+00000286  6100 005E                422      bsr bull_randNum
+0000028A  4A40                     423      tst.w d0
+0000028C  6700 0022                424      beq .leftWall
+00000290                           425      * start from the right wall
+Line 426 ERROR: Comma expected
+00000290                           426      move.w #RIGHT_WALL-BULL_DIMENSION, BULL_X_POS_OFFSET(a1)
+00000290  337C 0000 000E           427      move.w #0, BULL_START_OFFSET(a1)
+00000296  6000 0024                428      bra .center
+Line 429 ERROR: Symbol value differs between first and second pass
+0000029A                           429  .leftWall
+Line 430 ERROR: Undefined symbol
+0000029A  337C BD16 0004           430      move.w #LEFT_WALL, BULL_X_POS_OFFSET(a1)
+000002A0  337C 0001 000E           431      move.w #1, BULL_START_OFFSET(a1)
+000002A6                           432  
+000002A6                           433      * find the center of the bullet
+Line 434 ERROR: Symbol value differs between first and second pass
+000002A6                           434  .center
+000002A6  303C 0004                435      move.w #BULL_HALF_DIMENSION+1, d0
+000002AA  D069 0004                436      add.w BULL_X_POS_OFFSET(a1), d0
+000002AE  3340 0010                437      move.w d0, BULL_CENTER_X_OFFSET(a1)
+000002B2  303C 0004                438      move.w #BULL_HALF_DIMENSION+1, d0
+000002B6  D069 0008                439      add.w BULL_Y_POS_OFFSET(a1), d0
+000002BA  3340 0012                440      move.w d0, BULL_CENTER_Y_OFFSET(a1)
+000002BE  103C 0000                441      move.b #0, d0
+000002C2  6000 001C                442      bra .done
+Line 443 ERROR: Symbol value differs between first and second pass
+000002C6                           443  .allActive
+000002C6  103C 0001                444      move.b #1, d0
+Line 445 ERROR: Symbol value differs between first and second pass
+000002CA                           445  .done
+000002CA  4CDF 0004                446      movem.l (sp)+, .REGS
+000002CE  4E75                     447      rts
+000002D0                           448      
+000002D0                           449  
+000002D0                           450  *---
+000002D0                           451  * Returns a random number in the specified range
+000002D0                           452  * 
+000002D0                           453  * d0 - min number
+000002D0                           454  * d1 - max number
+000002D0                           455  *
+000002D0                           456  * out d0 - random number in range
+000002D0                           457  *---
+Line 458 ERROR: Symbol value differs between first and second pass
+000002D0                           458  bull_randNum:
+000002D0                           459  .REGS  REG D2-D4
+000002D0  48E7 3800                460      movem.l .REGS, -(sp)
+000002D4                           461      *** Code shamelessly recycled from Jeremy's RandomNumbers.x68 file
+000002D4  3600                     462      move.w d0, d3
+000002D6  3801                     463      move.w d1, d4
+000002D8  5244                     464      add.w #1, d4
+000002DA  9843                     465      sub.w d3, d4
+000002DC                           466      
+000002DC  2039 0000031E            467      move.l BULL_RANDOMVAL, d0
+000002E2  72AF                     468      moveq #$AF-$100, d1
+000002E4  7412                     469      moveq #18, d2
+Line 470 ERROR: Symbol value differs between first and second pass
+000002E6                           470  .Ninc0  
+000002E6  D080                     471      add.l d0, d0
+000002E8  6400 001A                472      bcc .Ninc1
+000002EC  B300                     473      eor.b d1, d0
+Line 474 ERROR: Symbol value differs between first and second pass
+000002EE                           474  .Ninc1
+000002EE  51CA 000C                475      dbf d2, .Ninc0
+000002F2                           476      
+000002F2  23C0 0000031E            477      move.l d0, BULL_RANDOMVAL
+000002F8                           478  
+000002F8  1400                     479      move.b d0, d2
+000002FA  84C4                     480      divu d4, d2
+000002FC  4842                     481      swap d2
+000002FE  D642                     482      add.w d2, d3
+00000300  3003                     483      move.w d3, d0
+Line 484 ERROR: Symbol value differs between first and second pass
+00000302                           484  .done
+00000302  4CDF 001C                485      movem.l (sp)+, .REGS
+00000306  4E75                     486      rts
+00000308                           487  
+00000308                           488  
+Line 489 ERROR: Symbol value differs between first and second pass
+00000308                           489  BULL_RANDOMVAL  ds.l 1
+Line 490 ERROR: Symbol value differs between first and second pass
+00000308                           490  BULL_ART_ADDR   ds.l 1
+00000308                           491  
+00000308                           492  
+00000308                           493  
+Line 494 WARNING: END directive missing, starting address not set
+
+33 errors detected
+1 warning generated
+
+
+SYMBOL TABLE INFORMATION
+Symbol-name         Value
+-------------------------
+BULL_ACTIVE_OFFSET  0
+BULL_ART_ADDR       322
+BULL_CENTER_X_OFFSET  10
+BULL_CENTER_Y_OFFSET  12
+BULL_CHECKHIT       A8
+BULL_CHECKHIT:ACTIVEFOUND  D0
+BULL_CHECKHIT:DONE  11A
+BULL_CHECKHIT:NONNEGX  E4
+BULL_CHECKHIT:NONNEGY  102
+BULL_CHECKHIT:REGS  40C
+BULL_CHECKHIT:RETURNTOLOOP  C2
+BULL_CHECKHIT:SEARCHLOOP  B8
+BULL_CREATEBULLET   22C
+BULL_CREATEBULLET:ALLACTIVE  2DC
+BULL_CREATEBULLET:CENTER  2BC
+BULL_CREATEBULLET:DONE  2E0
+BULL_CREATEBULLET:INACTIVEFOUND  254
+BULL_CREATEBULLET:LEFTWALL  2B0
+BULL_CREATEBULLET:REGS  4
+BULL_CREATEBULLET:SEARCHLOOP  23C
+BULL_CREATEBULLETLIST  0
+BULL_CREATEBULLETLIST:DONE  56
+BULL_CREATEBULLETLIST:ERROR  52
+BULL_CREATEBULLETLIST:INACTLOOP  1A
+BULL_CREATEBULLETLIST:REGS  404
+BULL_DIMENSION      7
+BULL_DRAWBULLETS    120
+BULL_DRAWBULLETS:ACTIVEFOUND  148
+BULL_DRAWBULLETS:DONE  16A
+BULL_DRAWBULLETS:REGS  80C
+BULL_DRAWBULLETS:RETURNTOLOOP  13A
+BULL_DRAWBULLETS:SEARCHLOOP  130
+BULL_ERASEBULLETS   5C
+BULL_ERASEBULLETS:ACTIVEFOUND  84
+BULL_ERASEBULLETS:DONE  A2
+BULL_ERASEBULLETS:REGS  80C
+BULL_ERASEBULLETS:RETURNTOLOOP  76
+BULL_ERASEBULLETS:SEARCHLOOP  6C
+BULL_FP_Y_POS_OFFSET  A
+BULL_GET_TIME       8
+BULL_HALF_DIMENSION  3
+BULL_HEIGHT_OFFSET  16
+BULL_MAX_SPEED      3
+BULL_MIN_SPEED      1
+BULL_MOVE           170
+BULL_MOVE:ACTIVEFOUND  19A
+BULL_MOVE:AIRBORNE  20E
+BULL_MOVE:BOUNCECHECK  1E6
+BULL_MOVE:DONE      226
+BULL_MOVE:MOVERIGHT  1C6
+BULL_MOVE:REGS      C1C
+BULL_MOVE:RETURNTOLOOP  18C
+BULL_MOVE:SEARCHLOOP  182
+BULL_RANDNUM        2E6
+BULL_RANDNUM:DONE   318
+BULL_RANDNUM:NINC0  2FC
+BULL_RANDNUM:NINC1  304
+BULL_RANDNUM:REGS   1C
+BULL_RANDOMVAL      31E
+BULL_SIZE           14
+BULL_START_OFFSET   E
+BULL_TYPE_OFFSET    2
+BULL_WIDTH_OFFSET   12
+BULL_X_POS_OFFSET   4
+BULL_X_VEL_OFFSET   6
+BULL_Y_POS_OFFSET   8
+BULL_Y_VEL_OFFSET   C
